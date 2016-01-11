@@ -1,9 +1,12 @@
 # Isabelle
 document
 output
+.IsaLibs.thy.marks
 
 # Misc
 temporal.txt
+aprove.jar
+.DS_Store
 
 # Latex
 

@@ -75,7 +75,7 @@ fun lpo_g f_ord (s, t) =
                         |> map Const
         val f_ord = if null f_ord then f_ord
                     else f_ord |> filter (fn (Const (n, _), _) => exists (fn Const (n', _) => n = n' | _ => raise ERROR "lpo_g") consts | _ => raise ERROR "lpo_g")
-                               |> sort (int_ord o (pairself snd))
+                               |> sort (int_ord o (apply2 snd))
                                (* Normalize filtered consts *)
                                |> (fn l =>
                                       if null l

@@ -16,7 +16,7 @@ sig
 
   val generate_cps                  : bool Config.T
 
-  val unify_inst                    : theory -> Envir.env -> 
+  val unify_inst                    : Proof.context -> Envir.env -> 
                                       (ctyp * ctyp) list * (cterm * cterm) list
 
   val discriminate_rules            : Proof.context -> (thm list -> bool) -> 
@@ -70,19 +70,19 @@ fun subsets s =
 
 (* instantiation utilities *)
 fun prep_trm thy env (x, (T, _)) =
-    (cterm_of thy (Var (x, Envir.norm_type (Envir.type_env env) T)), cterm_of thy (Envir.norm_term env (Var (x, T))))
+    (Thm.cterm_of thy (Var (x, Envir.norm_type (Envir.type_env env) T)), Thm.cterm_of thy (Envir.norm_term env (Var (x, T))))
 
 fun prep_ty thy env (x, (S, _)) =
-      (ctyp_of thy (TVar (x, S)), ctyp_of thy (Envir.norm_type (Envir.type_env env) (TVar (x, S))))
+      (Thm.ctyp_of thy (TVar (x, S)), Thm.ctyp_of thy (Envir.norm_type (Envir.type_env env) (TVar (x, S))))
 
-fun unify_inst thy env = 
+fun unify_inst ctxt env = 
     let
       val ctenv = env |> Envir.term_env
                       |> Vartab.dest
-                      |> map (prep_trm thy env)
+                      |> map (prep_trm ctxt env)
       val ctyenv = env |> Envir.type_env
                        |> Vartab.dest
-                       |> map (prep_ty thy env)
+                       |> map (prep_ty ctxt env)
     in
       (ctyenv,ctenv)
     end
@@ -137,7 +137,7 @@ fun scpairs thy (th1, th2) =
              Abs (_, T, t) =>
              let
                val unifier = if can (Sign.typ_unify thy (T,paty)) (Vartab.empty,Term.maxidx_typ T maxidx_typ)
-                             then Unify.unifiers (thy,(Envir.empty 1),[(pat,obj)]) handle ListPair.UnequalLengths => Seq.empty
+                             then Unify.unifiers (Context.Theory thy,(Envir.empty 1),[(pat,obj)]) handle ListPair.UnequalLengths => Seq.empty
                                                                                         | TERM _ => Seq.empty
                              else Seq.empty
                val (new_free,new_abs) = Term.dest_abs (Name.bound bounds, T, t)
@@ -150,7 +150,7 @@ fun scpairs thy (th1, th2) =
                          Var _ =>  Seq.append (msub bounds frees t (f o Conv.fun_conv)) (msub bounds frees u (f o Conv.arg_conv))
                        | _ => let
                            val unifier = if can (Sign.typ_unify thy (type_of obj,paty)) (Vartab.empty,Term.maxidx_typ (type_of obj) maxidx_typ)
-                                         then Unify.unifiers (thy,(Envir.empty 1),[(pat,obj)]) handle ListPair.UnequalLengths => Seq.empty
+                                         then Unify.unifiers (Context.Theory thy,(Envir.empty 1),[(pat,obj)]) handle ListPair.UnequalLengths => Seq.empty
                                                                                                     | TERM _ => Seq.empty
                                          else Seq.empty
                          in Seq.append (Seq.map (pair f) unifier)
@@ -159,8 +159,8 @@ fun scpairs thy (th1, th2) =
     in if valid_rewrites then
          msub 0 [] obj I
               |> Seq.list_of
-              |> map_filter (fn (conv,(env,_)) => SOME (conv,unify_inst thy env))
-              |> map (fn (conv,inst) => (conv,pairself (Drule.instantiate_normalize inst) (th1,th2')))
+              |> map_filter (fn (conv,(env,_)) => SOME (conv,unify_inst ctxt env))
+              |> map (fn (conv,inst) => (conv,apply2 (Drule.instantiate_normalize inst) (th1,th2')))
               |> map (fn (conv,(r1,r2)) => Conv.fconv_rule ((Conv.fun_conv o Conv.arg_conv o conv) (Conv.rewr_conv (varify_global ctxt r1))) r2)
               |> filter_out (fn th => EQUAL = (Term_Ord.term_ord o Utils.dest_equation) th)
        else []
@@ -231,7 +231,7 @@ fun ac_termination ctxt (equations, rules) th =
 fun discriminate_rules ctxt terminates thms =
     thms (*|> Utils.make_theorem_set*)
          |> map (fn th => (th, Drule.size_of_thm th))
-         |> sort (int_ord o (pairself snd))
+         |> sort (int_ord o (apply2 snd))
          |> map fst
          |> pair ([],[])
          |> Library.foldl
@@ -254,7 +254,7 @@ fun discriminate_rules ctxt terminates thms =
                    val _ = tracing ("with: " ^ Utils.str_of_thms (equations @ rules))
                in (equations, rules)
                end)
-(*         |> pairself Utils.make_theorem_set*)
+(*         |> apply2 Utils.make_theorem_set*)
 
 val discriminate_rules_var
       = Synchronized.var "discriminate_rules"
@@ -266,7 +266,7 @@ fun memoized_discriminate_rules ctxt terminates (thms as th :: _) =
       val (eqs, rules) = Utils.memoize_function Thm_List_Tab.lookup Thm_List_Tab.update discriminate_rules_var
                             (discriminate_rules ctxt terminates) thms
       val thy = Thm.theory_of_thm th
-      fun test thm1 thm2 = (Pattern.equiv thy o pairself Thm.full_prop_of) (thm1, thm2)
+      fun test thm1 thm2 = (Pattern.equiv thy o apply2 Thm.full_prop_of) (thm1, thm2)
   in Library.foldl (fn ((eqs', rules'), th) => if exists (test th) eqs
                                                then (th :: eqs', rules')
                                                else if exists (test th) rules
@@ -318,7 +318,7 @@ fun ground_joinable ctxt terminates f_map (e, E) =
       val _ = tracing ("Equations: " ^ Utils.str_of_thms equations)
       val _ = tracing ("Rules: " ^ Utils.str_of_thms rules)
       val _ = tracing ("e: " ^ Utils.str_of_thms [e])*)
-      val f_map = sort (int_ord o (pairself snd)) f_map
+      val f_map = sort (int_ord o (apply2 snd)) f_map
       val vars = e |> Thm.full_prop_of
                    |> (fn t => Term.add_vars t [])
                    |> map Var
@@ -480,7 +480,7 @@ fun complete global_meta_rws thy ctxt ord generate_cps terminates f_map E =
     let
       val proof_timeOut = Config.get ctxt Prover.max_time_in_proof
       val E = E |> map (fn th => (Utils.rule_int_ord th, th))
-                |> sort ((list_ord int_ord) o (pairself fst))
+                |> sort ((list_ord int_ord) o (apply2 fst))
                 |> map snd
       val E' = E
       fun compl (E,S,R) = case (if !completion_debug then print_completion (E,S,R) else ();
@@ -497,7 +497,7 @@ fun complete global_meta_rws thy ctxt ord generate_cps terminates f_map E =
                                                                (semi_critical_pairs thy ord [rl] [rl]))
                                                                 |> Utils.make_theorem_set
                                                                 |> map (fn th => (Utils.rule_int_ord th, th))
-                                                                |> sort ((list_ord int_ord) o (pairself fst))
+                                                                |> sort ((list_ord int_ord) o (apply2 fst))
                                                                 |> map snd
 (*                                                                |> map (Raw_Simplifier.rewrite_rule ctxt global_meta_rws)*)
                                                             else []

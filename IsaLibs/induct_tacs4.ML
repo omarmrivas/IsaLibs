@@ -65,7 +65,8 @@ fun choose_induct_tac set ctxt (goal,i) =
       (* tactic: "induct_tac"                                        *)
       fun meta_induct_tac_strategy vars_induction =
           (no_tac,vars_induction)
-            |> Library.foldl (fn (thms,(vs,th)) => (Induct_Tacs.induct_rules_tac ctxt [map (fn v => SOME (fst v)) vs] [th] i)
+            |> Library.foldl (fn (thms,(vs,th)) => (Induct_Tacs.induct_tac ctxt [map (fn v => SOME (fst v)) vs] (SOME [th]) i)
+(*            |> Library.foldl (fn (thms,(vs,th)) => (Induct_Tacs.induct_rules_tac ctxt [map (fn v => SOME (fst v)) vs] [th] i)*)
                                                      APPEND
                                                      thms)
       (* Strategy 2:                                                 *)

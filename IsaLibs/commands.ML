@@ -39,7 +39,7 @@ val _ =
             | NONE => ctxt
       end
   in Outer_Syntax.local_theory
-         @{command_spec "rec_complete"}
+         @{command_keyword "rec_complete"}
          "Proves a new equational lemma and performs ground completion."
          (complete_parser >> goal_prop)
   end
@@ -57,7 +57,7 @@ val _ =
                                                       |> map Utils.obj_to_meta
                     val (additions, deletions) =
                             rule |> Ground_Completion.run_completion' [] ctxt terminates TRS
-                                 |> pairself (map Utils.meta_to_obj)
+                                 |> apply2 (map Utils.meta_to_obj)
                 in (ctxt, additions)
                       |> tap (fn (_, thms) => tracing ("Additions: " ^ Utils.str_of_thms thms))
                       |> Library.foldl (fn (ctxt, thm) => map_contexts (Completion_Rules.add_thm thm) ctxt)
@@ -69,7 +69,7 @@ val _ =
               Proof.theorem NONE (after_qed) [[(prop, [])]] ctxt
             end
       in Outer_Syntax.local_theory_to_proof
-      @{command_spec "complete"}
+      @{command_keyword "complete"}
          "Proves a new equational lemma and performs ground completion."
          (complete_parser >> goal_prop) end
 

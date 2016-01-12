@@ -91,7 +91,7 @@ fun construct_rhs ctxt thy counterex_timeout consts size lemmas lhs =
   in equations
       |> test_by_generality_some
             (Counter_Example.unfalsified_conjecture ctxt counterex_timeout)
-            (Pattern.matches thy o apfst Logic.varify_global o pairself Utils.lhs)
+            (Pattern.matches thy o apfst Logic.varify_global o apply2 Utils.lhs)
   end
 
 fun construct_rhs' ctxt thy counterex_timeout consts_seq size lemmas lhs =
@@ -104,7 +104,7 @@ fun construct_rhs' ctxt thy counterex_timeout consts_seq size lemmas lhs =
                                  consts_seq size lemmas lhs)
   | NONE => NONE
 
-fun not_constructor thy (Const c) = is_none (Datatype_Data.info_of_constr thy c)
+fun not_constructor thy (Const c) = is_none (Old_Datatype_Data.info_of_constr thy c)
   | not_constructor _ _ = false
 
 fun construct_sequence goals ctxt thy max_consts counterex_timeout lambda_size lemmas generalized_lhs =
@@ -170,7 +170,7 @@ fun find_lemmas goals subgoals ctxt thy counterex_timeout lemmas =
           |> filter_out ((Utils.bad_equation thy) o HOLogic.dest_eq)
           |> map HOLogic.mk_Trueprop
           |> test_by_generality_all (Counter_Example.unfalsified_conjecture ctxt counterex_timeout)
-                                    (Pattern.matches thy o apfst Logic.varify_global o pairself Utils.lhs)
+                                    (Pattern.matches thy o apfst Logic.varify_global o apply2 Utils.lhs)
 (*          |> tap (fn _ => tracing "==================== generalizations ")
           |> tap (map (tracing o (Syntax.string_of_term ctxt)))
           |> tap (fn _ => tracing "==================== generalizations ")*)
@@ -197,15 +197,15 @@ fun find_lemmas goals subgoals ctxt thy counterex_timeout lemmas =
      |> Utils.make_term_set' thy
      |> filter_out (fn c =>
         exists (fn g => Pattern.equiv thy (c |> Logic.varify_global
-                                             |> Logic.incr_indexes ([], 1),
+                                             |> Logic.incr_indexes ([], [], 1),
                                            Logic.varify_global g)) goals)
 (*     |> tap (fn _ => tracing "=================== Results ")
      |> tap (map (tracing o (Syntax.string_of_term ctxt)))*)
      |> filter_out (Utils.bad_equation' thy)
-     |> filter_out (fn eq => exists (Pattern.matches thy o apfst Logic.varify_global o pairself Utils.lhs o rpair eq) goals)
+     |> filter_out (fn eq => exists (Pattern.matches thy o apfst Logic.varify_global o apply2 Utils.lhs o rpair eq) goals)
      |> Utils.sort_poset (Pattern.matches thy o
                           apfst Logic.varify_global o
-                          pairself Utils.lhs)
+                          apply2 Utils.lhs)
 (*     |> tap (fn _ => tracing "=================== Results ")
      |> tap (map (fn (i, t) => tracing (string_of_int i ^ ": " ^ Syntax.string_of_term ctxt t)))
      |> tap (fn _ => tracing "=================== Results ")*)
@@ -214,7 +214,7 @@ fun find_lemmas goals subgoals ctxt thy counterex_timeout lemmas =
                                             |> SOME) end
 
 (*fun rewrites_lhs thy conjecture lemma =
-  ((Pattern.matches thy) o (pairself Utils.lhs) o (apfst Thm.full_prop_of)) (lemma, conjecture)
+  ((Pattern.matches thy) o (apply2 Utils.lhs) o (apfst Thm.full_prop_of)) (lemma, conjecture)
 
 fun proved_by_rewriting ctxt lemmas proof_timeout conjecture =
   let val method = Method.Basic (SIMPLE_METHOD o (fn ctxt => Raw_Simplifier.rewrite_goals_tac ctxt lemmas))

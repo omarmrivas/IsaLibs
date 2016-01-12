@@ -99,7 +99,7 @@ fun initial_population {function_set,
                               in uniques @ map (fn t => (t, t |> prep
                                                               |> Term_Tab.lookup tab
                                                               |> the)) list end)
-        |> sort (Rat.ord o pairself snd)
+        |> sort (Rat.ord o apply2 snd)
    end
 
 fun cross s t =
@@ -189,7 +189,7 @@ fun cross' s t =
                                            test dom cod
                                         end)
           in if null qs'
-             then select (remove (op = o pairself fst) ((s_p, tao, p), 0) ps_weighted)
+             then select (remove (op = o apply2 fst) ((s_p, tao, p), 0) ps_weighted)
              else qs' |> map (fn x => (x, 1))
                       |> Utils.weighted_choose
                       |> pair (s_p, tao, p)
@@ -221,7 +221,7 @@ fun crossover s t =
   in Envir.beta_eta_contract r end
 
 fun mutation prob t =
-  if random () <= prob
+  if Random.random () <= prob
   then crossover t t
   else t
 
@@ -247,7 +247,7 @@ fun mutation' ({term_size, ...} : gp_data) t =
                          |> Envir.beta_eta_contract o list_comb
   in Utils.substitute (s, q) t end
 
-val rat_to_float = op / o pairself real o Rat.quotient_of_rat
+val rat_to_float = op / o apply2 real o Rat.quotient_of_rat
 
 fun print_pool ctxt pool =
   pool |> map (fn (t, rat) => 
@@ -279,7 +279,7 @@ fun next_generation (gp_data as {
                  |> Library.foldl (op +/)
                  |> (fn x => x // Rat.rat_of_int population_size)
       val (bst_individual, bst_error) =
-            pool |> Metis_Useful.minimum (Rat.ord o pairself snd)
+            pool |> Metis_Useful.minimum (Rat.ord o apply2 snd)
                  |> fst
       val _ = tracing ("Average size: " ^ string_of_real av_size)
       val _ = tracing ("Average error: " ^ Rat.string_of_rat av_error ^ " (" ^ (string_of_real o rat_to_float) av_error ^ ")")
@@ -372,7 +372,7 @@ fun next_generation (gp_data as {
                       end)*)
       val bests = take bests pool
   in bests @ rest
-      |> sort (Rat.ord o pairself snd) end
+      |> sort (Rat.ord o apply2 snd) end
 
 fun evolve function_set target_typ ctxt fitness finish term_size population_size generations bests mut_prob =
   (let val tab = Term_Tab.empty

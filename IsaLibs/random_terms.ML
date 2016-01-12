@@ -117,7 +117,7 @@ fun normalize_closed_term level Vars _ (Free (n, _)) =
 
 local
   fun choose_arg_size (Bis, _) Env s num_arg_terms =
-      let val rand_num = random_range 0 (num_arg_terms - 1)
+      let val rand_num = Random.random_range 0 (num_arg_terms - 1)
 (*          val _ = tracing ("choose_arg_size (0, " ^ string_of_int (num_arg_terms - 1) ^ "): " ^ string_of_int rand_num)*)
           val m = length Bis
           fun semi_fold _ [] = raise Library.ERROR "Should not be thrown"
@@ -133,7 +133,7 @@ local
       in semi_fold 0 (ndk (s - 1 - m) m) end
 
   fun choose_head_var A Env s num_app_terms =
-      let val rand_num = random_range 0 (num_app_terms - 1)
+      let val rand_num = Random.random_range 0 (num_app_terms - 1)
 (*          val vset = valid_head_var_type_set A Env*)
 (*          val _ = tracing ("choose_head_var (0, " ^ string_of_int (num_app_terms - 1) ^ "): " ^
                            " valid set size: " ^ string_of_int (length vset) ^ " - " ^
@@ -151,11 +151,11 @@ local
 (*  fun gen_var_term A Env =
       if type_cnt Env A = 0 then NONE
       else SOME (Free ("x." ^ string_of_int (index A Env) ^ "." ^
-                       string_of_int (random_range 0 (type_cnt Env A - 1)), A))*)
+                       string_of_int (Random.random_range 0 (type_cnt Env A - 1)), A))*)
            
   fun gen_var_term A Env =
       let val tc = (type_cnt Env A - 1)
-          val rand_num = random_range 0 tc
+          val rand_num = Random.random_range 0 tc
 (*          val _ = tracing ("gen_var_term (0, " ^ string_of_int tc ^ "): " ^ string_of_int rand_num)*)
       in
         if type_cnt Env A = 0 then NONE
@@ -172,12 +172,12 @@ local
         let
           val total_num_term = count_term A Env s
           val num_lam_term = count_term (res_type A) (type_cnt_inc Env (arg_type A)) (s - 1)
-          val rand_num = random_range 0 (total_num_term - 1)
+          val rand_num = Random.random_range 0 (total_num_term - 1)
 (*          val _ = tracing ("gen_term (0, " ^ string_of_int (total_num_term - 1) ^ "): " ^ 
                            " num_lambda_terms: " ^ string_of_int num_lam_term ^ 
                            " - "^ string_of_int rand_num)*)
         in if total_num_term = 0 then NONE
-           else if (*random_range 0 (total_num_term - 1)*) rand_num < num_lam_term
+           else if (*Random.random_range 0 (total_num_term - 1)*) rand_num < num_lam_term
            then SOME (gen_lam_term (arg_type A) (res_type A) Env s)
            else SOME (gen_app_term A Env s (total_num_term - num_lam_term))
         end

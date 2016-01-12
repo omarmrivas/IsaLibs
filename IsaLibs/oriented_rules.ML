@@ -45,7 +45,7 @@ val _ =
          |> memoized_rules
          |> (fn _ => ctxt)
   in Outer_Syntax.local_theory
-         @{command_spec "orient_rules"}
+         @{command_keyword "orient_rules"}
          "User suplied orientations for specific rule shapes."
          (parser >> term_pat)
   end

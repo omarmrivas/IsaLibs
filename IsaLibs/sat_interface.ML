@@ -48,10 +48,10 @@ fun bits_of_var bits (Free (a, _)) =
   | bits_of_var _ _ = raise ERROR "bits_of_var"
 
 fun vars_equal bits A B =
-    bits_equal (pairself (bits_of_var bits) (A, B))
+    bits_equal (apply2 (bits_of_var bits) (A, B))
 
 fun vars_less bits A B =
-    bits_less (pairself (bits_of_var bits) (A, B))
+    bits_less (apply2 (bits_of_var bits) (A, B))
 
 fun term_to_sat_prop t =
   let val bits = [] |> Term.add_frees t
@@ -62,8 +62,8 @@ fun term_to_sat_prop t =
               (Const (n, _), [A, B]) =>
                 if n = Const_Names.hol_eq then vars_equal bits A B
                 else if n = Const_Names.hol_less then vars_less bits A B
-                else if n = Const_Names.hol_conj then HOLogic.mk_conj (pairself term_to_sat_aux (A, B))
-                else if n = Const_Names.hol_disj then HOLogic.mk_disj (pairself term_to_sat_aux (A, B))
+                else if n = Const_Names.hol_conj then HOLogic.mk_conj (apply2 term_to_sat_aux (A, B))
+                else if n = Const_Names.hol_disj then HOLogic.mk_disj (apply2 term_to_sat_aux (A, B))
                 else (t $ u)
             | (Const (n, _), [A]) =>
                 if n = Const_Names.hol_not then HOLogic.mk_not (term_to_sat_aux A)
@@ -88,7 +88,7 @@ fun value_of_var bits tab sigma v =
     |> binary_to_int
 
 fun normalize_values l =
-  let val l = sort (int_ord o pairself snd) l
+  let val l = sort (int_ord o apply2 snd) l
   in if null l
      then l
      else l |> (fn l => ((0, (snd o hd) l, []), l))

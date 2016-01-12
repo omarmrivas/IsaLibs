@@ -30,7 +30,7 @@ val (simp_before, setup_simp_before) = Attrib.config_bool @{binding "simp_before
 val (max_time_in_counter_ex, setup_max_time_in_counter_ex) = Attrib.config_int @{binding "max_time_in_counter_ex"} (K 5)
 
 val nitpick_params = Nitpick_Commands.default_params @{theory} []
-val simp_method = Utils.parse Method.parse "simp" |> fst o fst
+fun simp_method ctxt = Utils.parse ctxt Method.parse "simp" |> fst o fst
 
 fun get_nitpick_params
    ({cards_assigns: (typ option * int list) list,
@@ -143,10 +143,10 @@ fun nitpick timeOut state =
                                             null (!Nitpick_Model.reconstructed_model)*)
                                           else false))) 0)
 
-fun quickcheck_nitpick_raw ctxt timeOut conjecture = 
+fun quickcheck_nitpick_raw ctxt timeOut conjecture =
     ctxt |> Proof.theorem NONE (K I) [[(conjecture, [])]]
          |> (fn state => if Config.get (Proof.context_of state) simp_before
-                         then Seq.hd (Proof.apply simp_method state)
+                         then Seq.hd (Proof.apply (simp_method (Proof.context_of state)) state)
                          else state)
          |> (fn state => state |> Utils.safe_eval "counter_example 164" (false, state) (quickcheck timeOut)
                                |> (fn (foo,_) => (foo, state)))

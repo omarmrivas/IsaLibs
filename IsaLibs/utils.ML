@@ -79,7 +79,7 @@ sig
   val lazy_one_of_each   : 'a list list -> unit -> 'a list option
   val lazy_subsets       : 'a list -> 'a list Seq.seq
   val safe_eval          : string -> 'b -> ('c -> 'b) -> 'c -> 'b
-  val parse              : (Token.T list -> 'a * Token.T list) -> string -> 'a * Token.T list
+  val parse              : Proof.context -> (Token.T list -> 'a * Token.T list) -> string -> 'a * Token.T list
   val timing_wrapper     : ('a -> 'b) -> 'a -> 'b
   val timing_wrapper'    : (Timing.timing -> bool) ->
                               (unit -> string) -> ('a -> 'b) -> 'a -> 'b
@@ -129,7 +129,7 @@ fun sort_poset rel s =
                       if rel (e, e')
                       then (i + 1, e')
                       else (i, e')) sm)
-    |> sort (int_ord o pairself fst)
+    |> sort (int_ord o apply2 fst)
 fun classify_poset rel s =
   let fun classify (s as (i, _) :: _) =
             let val (sl, sr) = take_prefix (fn (i', _) => i = i') s
@@ -241,7 +241,7 @@ fun full_map_aterms f (t $ u) =
 
 fun pattern_equiv thy (t1, t2) =
   Pattern.equiv thy (t1, t2)
-    handle TYPE msg => ((t1, t2) |> pairself (Syntax.string_of_term_global thy)
+    handle TYPE msg => ((t1, t2) |> apply2 (Syntax.string_of_term_global thy)
                                  |> (fn (s1, s2) => s1 ^ " : " ^ s2)
                                  |> tracing; raise TYPE msg)
 
@@ -253,10 +253,10 @@ fun make_term_set thy tms =
 
 fun make_term_set' thy terms =
   terms |> map_index (fn (i, t) => t |> Logic.varify_global
-                                     |> Logic.incr_indexes ([], i))
+                                     |> Logic.incr_indexes ([], [], i))
         |> make_term_set thy
         |> map (Logic.unvarify_global o Term_Subst.zero_var_indexes)
-        |> sort (int_ord o (pairself size_of_term))
+        |> sort (int_ord o (apply2 size_of_term))
 
 fun make_theorem_set thms =
   thms |> zero_var_indexes_list
@@ -394,14 +394,14 @@ fun get_definitional_rewrites thy term =
 fun definitional_orientation thy term =
     let
       val (s, t) = HOLogic.dest_eq term
-      val (f1, f2) = pairself (fn x => x |> Term.strip_comb |> fst) (s, t)
+      val (f1, f2) = apply2 (fn x => x |> Term.strip_comb |> fst) (s, t)
       fun obvious_orient (Const _, Abs _) = true
         | obvious_orient (Const _, Var _) = true
         | obvious_orient (Const _, Free _) = true
         | obvious_orient _ = false
       fun is_def_orient (f1, f2) = 
           let val f1_deps = definitional_dependencies thy ([], f1)
-              val (n1, n2) = pairself (fn f => f |> Term.dest_Const |> fst) (f1, f2)
+              val (n1, n2) = apply2 (fn f => f |> Term.dest_Const |> fst) (f1, f2)
               val f2_deps = definitional_dependencies thy ([], f2)
           in
             if is_equal (string_ord (n1,n2)) then false
@@ -457,7 +457,7 @@ fun lhs_in_rhs thy (lhs, rhs) =
                           exists_type is_TVar rhs orelse
                           exists_type (exists_subtype is_TVar) lhs orelse
                           exists_type (exists_subtype is_TVar) rhs
-                          then pairself (Logic.unvarify_global o Term_Subst.zero_var_indexes)
+                          then apply2 (Logic.unvarify_global o Term_Subst.zero_var_indexes)
                                 (lhs, rhs) else (lhs, rhs)
       val pattern = Logic.varify_global lhs
   in rhs |> positions
@@ -466,7 +466,8 @@ fun lhs_in_rhs thy (lhs, rhs) =
 fun top_symbol_constructor thy (lhs, _) = 
   case lhs |> strip_comb
            |> fst of
-       Const c => is_some (Datatype_Data.info_of_constr thy c)
+(*       Const c => is_some (Datatype_Data.info_of_constr thy c)*)
+       Const c => is_some (Old_Datatype_Data.info_of_constr thy c)
      | _       => false
 
 fun not_constructor thy t = 
@@ -775,7 +776,7 @@ fun weighted_choose (L : ('a * int) list) =
                                     then raise ERROR "Null list"
                                     else if x < 0
                                     then raise ERROR "Weights sum 0 or less"
-                                    else random_range 0 x)
+                                    else Random.random_range 0 x)
         fun fld L i =
           case L of
             (x, w) :: L =>
@@ -786,12 +787,17 @@ fun weighted_choose (L : ('a * int) list) =
             | _ => raise ERROR "Should not fail 51"
     in fld L 0 end
 
-local 
+(*fun parse p input = Scan.finite Token.stopper (Scan.error p) input*)
+
+local
   (*val method = parse Method.parse "induct_auto" |> fst*)
-  fun filtered_input str = 
-      filter Token.is_proper (Outer_Syntax.scan Position.none str)
+  fun filtered_input ctxt str = 
+      let val keywords = Thy_Header.get_keywords' ctxt
+      in str |> Token.explode keywords Position.start
+             |> filter Token.is_proper
+      end
 in
-fun parse p input = Scan.finite Token.stopper (Scan.error p) (filtered_input input)
+fun parse ctxt p input = Scan.finite Token.stopper (Scan.error p) (filtered_input ctxt input)
 end
 
 fun timing_wrapper tac st =
@@ -930,13 +936,13 @@ fun order_ints_raw t =
 val rule_int_ord = order_ints_raw o Thm.concl_of
 end
 fun str_of_thms thms = 
-  let fun str_of_cterm thy t = Syntax.string_of_term_global thy (term_of t)
-      fun str_of_thm thy thm = str_of_cterm thy (#prop (crep_thm thm))
+  let fun str_of_cterm thy t = Syntax.string_of_term_global thy (Thm.term_of t)
+      fun str_of_thm thy thm = str_of_cterm thy (#prop (Thm.crep_thm thm))
   in commas (map (fn th => str_of_thm (Thm.theory_of_thm th) th) thms) end
 
 local 
   fun pretty_cterm ctxt ctrm =
-    Syntax.pretty_term ctxt (term_of ctrm)
+    Syntax.pretty_term ctxt (Thm.term_of ctrm)
 
   fun pretty_cterms ctxt ctrms =
     Pretty.block (Pretty.commas (map (pretty_cterm ctxt) ctrms))
@@ -945,7 +951,7 @@ local
   let
     val ctxt' = Config.put show_question_marks false ctxt
   in
-    Syntax.pretty_term ctxt' (prop_of thm)
+    Syntax.pretty_term ctxt' (Thm.prop_of thm)
   end
 in
 fun print_ss ctxt =

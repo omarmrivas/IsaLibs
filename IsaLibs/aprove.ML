@@ -80,7 +80,7 @@ fun trs_to_wst TRS =
                      |> (fn vs => "(VAR " ^ vs ^ ")")
       val eqs_ref = Unsynchronized.ref []
       val consts_ref = Unsynchronized.ref []
-      val rules = trs |> map (thm_to_wst o (pairself (eliminate_lambdas eqs_ref consts_ref)) o Utils.dest_equation)
+      val rules = trs |> map (thm_to_wst o (apply2 (eliminate_lambdas eqs_ref consts_ref)) o Utils.dest_equation)
                       |> (fn eqs => map thm_to_wst (!eqs_ref) @ eqs)
                       |> space_implode " "
                       |> (fn rs => "(RULES " ^ rs ^ ")")

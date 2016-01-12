@@ -28,13 +28,13 @@ val method_setup =
                  (Scan.succeed (fn ctxt => 
                                    SIMPLE_METHOD (Sledgehammer_Tactics.sledgehammer_with_metis_tac
                                                     ctxt [("timeout",Int.toString (Config.get ctxt max_time_in_proof))]
-                                                    Sledgehammer_Fact.no_fact_override 1)))
+                                                    Sledgehammer_Fact.no_fact_override [] 1)))
                  "interleave spass and ..."
 
 val _ = Context.>> (Context.map_theory method_setup)
 
-val sledgehammer_method = Utils.parse Method.parse "spass_auto" |> fst o fst
-val induct_auto_method = Utils.parse Method.parse "induct_auto" |> fst o fst
+fun sledgehammer_method ctxt = Utils.parse ctxt Method.parse "spass_auto" |> fst o fst
+fun induct_auto_method ctxt = Utils.parse ctxt Method.parse "induct_auto" |> fst o fst
 
 fun prove_from_method ctxt0 (SOME simps) method conjecture =
   let val ctxt = ctxt0 addsimps simps
@@ -72,7 +72,7 @@ fun prove_from_method ctxt0 (SOME simps) method conjecture =
       end
 
 fun prove_from_spass ctxt0 args conjecture = 
-  prove_from_method ctxt0 args sledgehammer_method conjecture
+  prove_from_method ctxt0 args (sledgehammer_method ctxt0) conjecture
 
 fun prove ctxt args method conjecture timeOut = 
   let fun prove' ctxt args method conjecture timeOut = 
@@ -87,7 +87,7 @@ fun prove ctxt args method conjecture timeOut =
   end
 
 fun cheat_prover ctxt prop =
-  (K (Skip_Proof.cheat_tac 1))
+  (K (Skip_Proof.cheat_tac ctxt 1))
     |> Goal.prove ctxt [] [] prop
 
 

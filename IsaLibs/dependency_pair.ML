@@ -51,7 +51,7 @@ fun dependency_pairs TRS =
                                                                       Const (name', _) => name = name'
                                                                     | _ => false)
                                                                  | _ => false) defined
-                                                     then pairself (rename_top "DP") (l, t) :: ps
+                                                     then apply2 (rename_top "DP") (l, t) :: ps
                                                      else ps 
                                                   end) r []
     in maps pairs sides end
@@ -425,7 +425,7 @@ fun subterm_positions P (u, v) =
                                                       if test_property P pos_u pos_v (u, v)
                                                       then (pos_u :: L1, pos_v :: L2)
                                                       else (L1,L2)))
-          |> pairself (make_set PosSet.update PosSet.empty)
+          |> apply2 (make_set PosSet.update PosSet.empty)
           |> (fn (set_u, set_v) => ((symbol_u, set_u), (symbol_v, set_v)))
     end
 
@@ -632,15 +632,15 @@ fun af_pi_iterator thy TRS D mp component =
 
 
 fun weak_lpo_g pi f_ord =
-    (fn P => ((Orders.lpo_g f_ord) o (pairself (apply_pi pi))) P handle General.Subscript => false)
+    (fn P => ((Orders.lpo_g f_ord) o (apply2 (apply_pi pi))) P handle General.Subscript => false)
 
 (* FIXME: This exception should not be raised in first place !!! *)
 fun weak_lpo_ge pi f_ord =
-    (fn P => ((fn (s, t) => s aconv t orelse Orders.lpo_g f_ord (s, t)) o (pairself (apply_pi pi))) P
+    (fn P => ((fn (s, t) => s aconv t orelse Orders.lpo_g f_ord (s, t)) o (apply2 (apply_pi pi))) P
         handle General.Subscript => false)
 
 (*fun memoized_weak_lpo_g map_ref pi f_ord =
-    (Orders.memoized_lpo_g map_ref f_ord) o (pairself (apply_pi pi))*)
+    (Orders.memoized_lpo_g map_ref f_ord) o (apply2 (apply_pi pi))*)
 
 fun extract_compatible_orders pi component =
     let

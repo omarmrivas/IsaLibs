@@ -14,6 +14,7 @@ sig
   val max_lambda_size              : int Config.T
   val use_metis                    : bool Config.T
 
+  val normalise_thm        :  Proof.context -> thm list -> thm -> thm
   val normalise_conjecture :  Proof.context -> thm list -> term -> term
   val meta_induction : (term list -> term list -> Proof.context -> theory -> int -> thm list -> term option)
                        -> Proof.context -> int -> term -> (thm list * thm list) option
@@ -30,6 +31,14 @@ val (max_num_generalizations, setup_max_num_generalizations) = Attrib.config_int
 val (max_consts_in_generalizations, setup_max_consts_in_generalizations) = Attrib.config_int @{binding "max_consts_in_generalizations"} (K 2)
 val (max_lambda_size, setup_max_lambda_size) = Attrib.config_int @{binding "max_lambda_size"} (K 8)
 val (use_metis, setup_use_metis) = Attrib.config_bool @{binding "use_metis"} (K true)
+
+fun normalise_thm ctxt simps thm =
+  let val ctxt = ctxt |> Context.Proof
+                      |> Simplifier.map_ss (fn simpset => simpset addsimps simps)
+                      |> Context.the_proof
+  in
+    simplify ctxt thm
+  end
 
 fun normalise_conjecture ctxt simps prop =
   let val ctxt = ctxt |> Context.Proof

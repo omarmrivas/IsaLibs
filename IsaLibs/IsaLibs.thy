@@ -23,7 +23,8 @@ ML_file "ground_completion.ML"
 ML_file "proof_tools.ML"
 ML_file "commands.ML"
 ML_file "oriented_rules.ML"
-ML_file "GP.ML"
+(*ML_file "gp.ML"*)
+ML_file "gp_hol.ML"
 
 setup {*
 DB_Counter_Example.setup_use_quickcheck #>
@@ -67,30 +68,7 @@ text {* Associative operators must be oriented this way to avoid non-termination
         in case they are also Commutative operators. *}
 orient_rules "?X (?X (?x :: ?'a) (?y :: ?'a)) (?z :: ?'a) = ?X ?x (?X ?y ?z)"
 
-fun app :: "'a list \<Rightarrow> 'a list \<Rightarrow> 'a list" where
-"app [] ys = ys" |
-"app (x # xs) ys = x # app xs ys"
-
-fun rev :: "'a list \<Rightarrow> 'a list" where
-"rev [] = []" |
-"rev (x # xs) = app (rev xs) [x]"
-
-fun itrev :: "'a list \<Rightarrow> 'a list \<Rightarrow> 'a list" where
-"itrev [] ys = ys" |
-"itrev (x # xs) ys = itrev xs (x # ys)"
-
 declare[[eta_contract = false]]
-
-ML {*
-  val ff = type_of
-  val t1 = @{term "\<lambda>x. (x::('a\<Rightarrow>'b)\<Rightarrow>'a\<Rightarrow>'b)"}
-  val typ = type_of t1
-  val t2 = @{term "\<lambda>(x::('a\<Rightarrow>'b)\<Rightarrow>'a\<Rightarrow>'b) y. (y::'a\<Rightarrow>'b) "}
-  val t3 = @{term "\<lambda>(x::('a\<Rightarrow>'b)\<Rightarrow>'a\<Rightarrow>'b) y. x (y::'a\<Rightarrow>'b) "}
-  val t4 = @{term "\<lambda>(x::('a\<Rightarrow>'b)\<Rightarrow>'a\<Rightarrow>'b) (y::'a\<Rightarrow>'b) z. y z "}
-  val t5 = @{term "\<lambda>(x::('a\<Rightarrow>'b)\<Rightarrow>'a\<Rightarrow>'b) y. x (\<lambda>z. y z)"}
-  val foo = find_first (fn (_,t) => type_of t <> typ) [(1,t1), (2,t2), (3,t3), (4,t4), (5,t5)]
-*}
 
 ML {*
   val p1 = Multithreading.max_threads_value ()
@@ -98,90 +76,89 @@ ML {*
 *}
 
 ML {*
-  val rows = (2 upto 11) |> map (fn i => (i, DB_Random_Terms.enumerate_terms @{typ "(('a\<Rightarrow>'b)\<Rightarrow>'a\<Rightarrow>'b)\<Rightarrow>('a\<Rightarrow>'b)\<Rightarrow>'a\<Rightarrow>'b"} i))
-          |> tap (map (fn (i, trms) => 
-              let val _ = tracing (string_of_int i) in
-              map (tracing o (Syntax.string_of_term @{context})) trms
-              end ))
+  val f = Utils.lazy_one_of_each [[1,2,3], [1,2,3]]
+  fun f_vals f = case f () of
+                  SOME v => v :: f_vals f
+                | NONE => []
 *}
 
 ML {*
-  val terms = DB_Random_Terms.enumerate_all_terms @{typ "(('a\<Rightarrow>'b)\<Rightarrow>'a\<Rightarrow>'b)\<Rightarrow>('a\<Rightarrow>'b)\<Rightarrow>'a\<Rightarrow>'b"} 13
-                |> tap (fn l => tracing ((string_of_int o length) l))
-                |> map (Envir.eta_long [])
-                |> map Utils.unique_names
-                |> distinct (is_equal o Term_Ord.term_ord)
-                |> tap (fn l => tracing ((string_of_int o length) l))
-  val t1 = nth terms 0
-  val _ = tracing (Syntax.string_of_term @{context} t1)
-  val t2 = nth terms 4
-  val _ = tracing (Syntax.string_of_term @{context} t2)
-  val cc = DB_GP.crossover t1 t2 
-              |> Envir.eta_long []
-  val _ = tracing (Syntax.string_of_term @{context} cc)
-  val levelsep = 0.8
-
-  val nodesep = 3.0
-  val hspace = 2.0 
-  val r = [t1, t2, cc] |> map (Latex_Utils.latex_tree_with_pos levelsep nodesep)
-                   |> map (fn t => "$" ^ t ^ "$")
-                   |> (fn trms => "" ^ Latex_Utils.latex_table "tabular" hspace [trms] ^ "")
-                   |> File.write (Path.basic "articulo.txt")
+  val vs = f_vals f
+  val vss = sort (int_ord o apply2 (fn xs => Library.foldl (op +) (0, xs))) vs
 *}
+
+
+text {* Syntesise function @{term "f x = 2 * x * x - x + (5::rat)"} *}
+
+(*definition scheme where
+"scheme P \<equiv> \<exists>f. \<forall>x y. (f 0 y = y \<and>
+                       f (Suc x) y = Suc (P x y f))"*)
+
+(*ML {*
+  val names = ["f"]
+  val eqns = [@{prop "f x = x * (x::int)"}]
+*}
+
+local_setup {*
+  fn lthy => 
+    let val ctxt = DB_GP.mutual_function lthy (names, eqns)
+        val lthy' = Proof_Context.theory_of ctxt |> Named_Target.theory_init
+        val t = Const ("IsaLibs.f", @{typ "int\<Rightarrow>int"})
+        val _ = tracing (Value.value ctxt (t $ Syntax.read_term ctxt "12::int")
+                          |> Syntax.string_of_term ctxt)
+        val _ = tracing (Syntax.string_of_term ctxt t)
+    in lthy' end
+*}*)
 
 ML {*
-  val tt = type_of t1
-  val position = Utils.positions t1
-    |> find_first (fn (_, _, pos) => pos = [0, 0, 0, 0, 1, 0])
-(*    |> (fn SOME (_, ty, _) => ty)*)
+  tracing (Syntax.string_of_term @{context} @{term "f"})
 *}
-
-ML {*
-  val typ1 = @{typ "'a\<Rightarrow>'b"}
-  val typ2 = @{typ "'b"}
-  val t = Abs ("x", typ1, Abs ("x", typ2, Bound 1 $ Bound 0))
-  val t' = Utils.unique_names t
-  val w = ML_Syntax.print_term t1
-*}
-
-ML {*
-  val rows = (2 upto 11) |> map (fn i => (i, Enumerated_Terms.generate_terms' @{theory} @{typ "(('a\<Rightarrow>'b)\<Rightarrow>'a\<Rightarrow>'b)\<Rightarrow>('a\<Rightarrow>'b)\<Rightarrow>'a\<Rightarrow>'b"} i))
-          |> map (fn (i, trms) => 
-              let val _ = tracing (string_of_int i) in
-              map (tracing o (Syntax.string_of_term @{context})) trms
-              end )
-*}
-
-ML {*
-  val rows = (2 upto 11) |> map (fn i => (i, Enumerated_Terms.generate_terms' @{theory} @{typ "(('a\<Rightarrow>'b)\<Rightarrow>'a\<Rightarrow>'b)\<Rightarrow>('a\<Rightarrow>'b)\<Rightarrow>'a\<Rightarrow>'b"} i))
-                        |> map_filter (fn (i, trms) => if null trms
-                                                       then NONE
-                                                       else SOME (i, trms))
-                        |> map (fn (i, trms) => (string_of_int i, map Latex_Utils.latex_tree trms))
-                        |> map (fn (i, trms) => [i, "$" ^ Latex_Utils.latex_table "array" [trms] ^ "$"])
-  val r = rows |> Latex_Utils.latex_table "tabular"
-               |> File.write (Path.basic "prueba.txt")
-*}
-
-ML {*
-(*  val str = @{term "\<lambda>x y. x y"} |> Latex_Utils.latex_tree_with_pos
-                                |> File.write (Path.basic "prueba.txt")*)
-*}
-
-value "to_rat (2::int)"
-
-fun map2 where
-"map2 f [] _ = []" |
-"map2 f _ [] = []" |
-"map2 f (x#xs) (y#ys) = f x y # map2 f xs ys"
 
 definition scheme where
-"(scheme X :: int\<Rightarrow>int) = X (op + :: int\<Rightarrow>int\<Rightarrow>int) (op * :: int\<Rightarrow>int\<Rightarrow>int) (0 :: int) (\<lambda>x::int. x+1) (op - :: int\<Rightarrow>int\<Rightarrow>int)"
+"scheme P \<equiv> \<exists>f::int\<Rightarrow>int. \<forall>x::int. 
+  (f x = P x (1::int)
+             (op + :: int\<Rightarrow>int\<Rightarrow>int)
+             (op - :: int\<Rightarrow>int\<Rightarrow>int)
+             (op * :: int\<Rightarrow>int\<Rightarrow>int))"
 
-definition f where
-"f x = 2 * x * x - x + (5::rat)"
+ML {*
+  fun fitness ctxt =
+    let fun goal x = 2 * x * x - x + 5
+        val f = Const ("IsaLibs.f", @{typ "int\<Rightarrow>int"})
+(*        val simps = Utils.get_rewrites (Proof_Context.theory_of ctxt) "f.simps"
+        val _ = tracing (Utils.str_of_thms simps)*)
+        val xs = 0 upto 10
+        val ys = map goal xs
+        val rs = map (fn i => (f $ Utils.numeral_of_int ctxt i)
+                                |> Value.value ctxt
+(*                                |> tap (fn t => tracing (Syntax.string_of_term ctxt t))*)
+                                |> Utils.int_of_numeral) xs
+        val ds = map2 (fn x => fn y => (x - y) * (x - y)) ys rs
+    in (0, ds) |> Library.foldl (op +)
+               |> Rat.rat_of_int end
+  fun finish ({fit, ...} : GP.individual) = Rat.eq (Rat.zero, fit)
+  val term_size = 33
+  val population_size = 100
+  val generations = 200
+  val bests = 1
+  val mut_prob = 0.05
+  val scheme = @{thm "scheme_def"}
+(*  val ctxt = @{context}
+  val r = GP.evolve scheme ctxt fitness finish term_size population_size generations bests mut_prob*)
+*}
 
-term "let x = 3::rat in let y = 5::rat in x * y"
+local_setup {*
+ fn lthy => 
+  case GP.evolve scheme lthy fitness finish term_size population_size generations bests mut_prob of
+    SOME ind => (#ctxt ind)
+  | NONE => lthy
+*}
+
+thm f.simps
+
+ML {*
+  
+*}
 
 definition fitness where
 "fitness (i::rat\<Rightarrow>rat) =

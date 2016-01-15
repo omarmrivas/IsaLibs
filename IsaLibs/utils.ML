@@ -18,6 +18,7 @@ sig
   val classify_poset     : ('a * 'a -> bool) -> 'a list -> 'a list list
   
   (* Terms *)
+  val term_to_string     : Proof.context -> term -> string
   val unique_names       : term -> term
   val dummyfy_term       : term -> term
   val positions          : term -> (term * typ * int list) list
@@ -69,6 +70,7 @@ sig
   
   (* Others *)
   val int_of_numeral     : term -> int
+  val numeral_of_int     : Proof.context -> int -> term
   val minby              : ('a * 'a -> order) -> ('b -> 'a) -> 'b list -> 'b
   val maxby              : ('a * 'a -> order) -> ('b -> 'a) -> 'b list -> 'b
   val next_digit         : int list -> int list -> int list option
@@ -87,6 +89,7 @@ sig
                            'a Synchronized.var -> ('b -> 'c) -> 'b -> 'c
   val foldl_seq          : ('a * 'b -> 'a) -> 'a * 'b Seq.seq -> 'a
   val weighted_choose    : ('a * int) list -> 'a
+  val repeat_until       : ('a -> bool) -> ('b -> 'a) -> 'b -> 'a
 end
 
 structure DB_Utils
@@ -308,6 +311,11 @@ fun substitute (t', 0 :: pos) (Abs (v, T, t)) =
       p $ (substitute (t', pos) q)
   | substitute (t', []) _ = t'
   | substitute (_, pos) t = raise BadPosition (t, pos)
+
+fun term_to_string ctxt t =
+    let
+      val ctxt' = Config.put show_markup false ctxt;
+    in Print_Mode.setmp [] (Syntax.string_of_term ctxt') t end
 
 fun unique_names t =
   let fun unique names (Abs (v, T, t)) =
@@ -818,7 +826,30 @@ in
   else res
 end
 
+(* This function only makes sense on stochastic functions *)
+  fun repeat_until prop f x =
+    let val v = f x
+    in if prop v
+       then v
+       else repeat_until prop f x
+    end
+
+fun numeral_of_int ctxt i =
+  Syntax.read_term ctxt (string_of_int i ^ "::int")
+
   fun int_of_numeral t =
+  let
+    val s = term_to_string @{context} t
+    val ss = space_explode " " s
+  in case ss of
+      [s] => fst (s |> (map Char.toString) o String.explode
+                    |> read_int)
+    | [_, s] => ~(fst (s |> (map Char.toString) o String.explode
+                         |> read_int))
+    | _ => raise ERROR "Malformed numeral!"
+  end
+
+(*  fun int_of_numeral t =
     let fun sign (Const (m, ty) $ t) = if m = Const_Names.Minus
                                        then (~1, t)
                                        else (1, Const (m, ty) $ t)
@@ -839,7 +870,7 @@ end
                                        else raise ERROR "Malformed Numeral"
           | numeral _ _ = raise ERROR "Malformed Numeral"
         val (p, t) = sign t
-    in numeral p t end
+    in numeral p t end*)
 
 local
 structure Thm_List_Tab = Table(type key = thm list val ord = list_ord Thm.thm_ord)

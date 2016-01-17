@@ -111,8 +111,9 @@ fun defining_equations scheme =
   in (names, map HOLogic.mk_Trueprop eqns) end
 
 fun well_defined lthy t =
-  t |> defining_equations
-    |> try (mutual_function lthy)
+  (t |> defining_equations
+    |> try (mutual_function lthy))
+    handle TERM _ => NONE
 
 fun initial_population (data : gp_data) =
    let val vars = (#scheme data)

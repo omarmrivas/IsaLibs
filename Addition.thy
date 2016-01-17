@@ -35,8 +35,10 @@ ML {*
                                       [x,y] => (x,y)
                                     | _ => raise ERROR "")
         val ys = map (fn (x,y) => goal x y) xs'
-        val rs = map (fn (x,y) => (f $ Utils.numeral_of_int ctxt x $ Utils.numeral_of_int ctxt y)
+        val rs = map (fn (x,y) => (f $ Utils.numeral_of_nat ctxt x $ Utils.numeral_of_nat ctxt y)
+                                |> (fn t => @{term "num_of_nat"} $ t)
                                 |> Value.value ctxt
+                                |> (fn t => @{term "numeral :: num\<Rightarrow>nat"} $ t)
                                 |> Utils.int_of_numeral) xs'
         val ds = map2 (fn x => fn y => (x - y) * (x - y)) ys rs
     in (0, ds) |> Library.foldl (op +)

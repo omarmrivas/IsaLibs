@@ -7,5 +7,5 @@ session "IsaLibs" = "HOL" +
     (* Bar *)
   theories
     (* Baz *)
-  document_files
-    "root.tex"
+(*  document_files
+    "root.tex"*)

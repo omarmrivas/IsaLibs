@@ -71,6 +71,7 @@ sig
   (* Others *)
   val int_of_numeral     : term -> int
   val numeral_of_int     : Proof.context -> int -> term
+  val numeral_of_nat     : Proof.context -> int -> term
   val minby              : ('a * 'a -> order) -> ('b -> 'a) -> 'b list -> 'b
   val maxby              : ('a * 'a -> order) -> ('b -> 'a) -> 'b list -> 'b
   val next_digit         : int list -> int list -> int list option
@@ -836,6 +837,9 @@ end
 
 fun numeral_of_int ctxt i =
   Syntax.read_term ctxt (string_of_int i ^ "::int")
+
+fun numeral_of_nat ctxt i =
+  Syntax.read_term ctxt (string_of_int i ^ "::nat")
 
   fun int_of_numeral t =
   let

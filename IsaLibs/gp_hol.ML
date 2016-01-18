@@ -8,6 +8,8 @@ Genetic Programming algorithm for Simply-typed lambda calculus.
 
 signature GP =
 sig
+  val max_time_in_fitness  : int Config.T
+
   type subst = (typ * typ) list * (term * term) list
   type individual = {ctxt  : Proof.context,
                      genome: term list,
@@ -15,18 +17,21 @@ sig
                      norm  : term,
                      fit   : Rat.rat}
 
-(*  type individual = subst * term * Rat.rat*)
-
-  val evolve : thm ->
+  val evolve : bool -> thm ->
     Proof.context ->
     (Proof.context -> Rat.rat) ->
     (individual -> bool) ->
     int -> int -> int -> int -> real -> individual option
+
 end
 
 structure DB_GP
 (* : GP *)
 = struct
+
+val (max_time_in_fitness, setup_max_time_in_fitness) = Attrib.config_int @{binding "max_time_in_fitness"} (K 30)
+
+val big_rational = Rat.rat_of_int 1000000
 
 type subst = (typ * typ) list * (term * term) list
   type individual = {ctxt  : Proof.context,
@@ -34,7 +39,6 @@ type subst = (typ * typ) list * (term * term) list
                      subst : subst,
                      norm  : term,
                      fit   : Rat.rat}
-(*type individual = subst * term * Rat.rat*)
 
 type gp_data = { scheme : thm,
                  term_size : int,
@@ -45,9 +49,14 @@ type gp_data = { scheme : thm,
                  finish : individual -> bool,
                  term_count : (int * int) list list,
                  simps : thm list,
+                 debug : bool,
+                 timeout : Time.time,
                  ctxt : Proof.context}
 
 exception DONE of individual
+
+fun timeout_error ctxt t =
+  tracing ("The term " ^ Syntax.string_of_term ctxt t ^ " is terminating but the fitness function time out.")
 
 fun mk_individual ctxt trms subst t fit : individual = 
   {ctxt = ctxt,
@@ -132,7 +141,10 @@ fun initial_population (data : gp_data) =
                    then new_individual (i+1) (set, unique, repeated)
                    else let val wd = well_defined (#ctxt data) t'
                         in case wd of
-                            SOME ctxt => (Term_Tab.update (t', wd) set, (ctxt, trms) :: unique, repeated)
+                            SOME ctxt => let val _ = if (#debug data)
+                                                     then tracing (".."^ string_of_int i)
+                                                     else ()
+                                         in (Term_Tab.update (t', wd) set, (ctxt, trms) :: unique, repeated) end
                           | NONE => new_individual (i+1) (Term_Tab.update (t', wd) set, unique, repeated)
                         end)
              else (if Term_Tab.defined set t'
@@ -158,7 +170,11 @@ fun initial_population (data : gp_data) =
                 let val uniques = 
                       unique |> Par_List.map
                                   (fn (ctxt, trms) =>
-                                        let val rat = (#fitness data) ctxt
+                                        let val rat = (TimeLimit.timeLimit
+                                                        (#timeout data)
+                                                        (#fitness data) ctxt)
+                                                        handle TimeLimit.TimeOut => (timeout_error ctxt (prep trms);
+                                                                                     big_rational)
                                             val ind = mk_individual ctxt
                                                                     trms
                                                                     (mk_subst vars trms)
@@ -413,7 +429,10 @@ fun next_generation (data : gp_data)
       val minv = pool' |> Utils.minby int_ord snd
                        |> snd
       val  pool' = map (fn (t, i) => (t, i div minv)) pool'
-(*      val _ = print_pool' (#ctxt data) pool'*)
+      val _ = if (#debug data)
+              then print_pool' (#ctxt data) pool' 
+                     |> (fn _ => ())
+              else ()
       fun new_ind global =
           let val i1 = pool' |> Utils.weighted_choose
                              |> #genome
@@ -429,7 +448,11 @@ fun next_generation (data : gp_data)
             SOME (SOME ind) => mk_individual ctxt trms (mk_subst vars trms) 
                                              i' (#fit ind)
           | SOME NONE => raise ERROR "Ilegal individual!"
-          | NONE   => let val rat = (#fitness data) ctxt
+          | NONE   => let val rat = (TimeLimit.timeLimit
+                                                        (#timeout data)
+                                                        (#fitness data) ctxt)
+                                                        handle TimeLimit.TimeOut => (timeout_error ctxt (prep trms);
+                                                                                     big_rational)
                           val ind = mk_individual ctxt
                                                   trms
                                                   (mk_subst vars trms)
@@ -455,7 +478,7 @@ fun next_generation (data : gp_data)
       |> sort (Rat.ord o apply2 #fit)
       |> pair global end
 
-fun evolve scheme ctxt fitness finish term_size population_size generations bests mut_prob =
+fun evolve dbg scheme ctxt fitness finish term_size population_size generations bests mut_prob =
  (let val _ = tracing "Building initial population..."
       val vars = scheme
                    |> Thm.full_prop_of
@@ -478,6 +501,9 @@ fun evolve scheme ctxt fitness finish term_size population_size generations best
                  finish = finish,
                  term_count = term_count,
                  ctxt = ctxt,
+                 debug = dbg,
+                 timeout = max_time_in_fitness |> Config.get ctxt
+                                               |> Time.fromSeconds,
                  simps = scheme |> Thm.full_prop_of
                                 |> global_simps ctxt
                                 |> Utils.make_theorem_set

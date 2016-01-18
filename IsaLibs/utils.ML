@@ -850,7 +850,7 @@ fun numeral_of_nat ctxt i =
                     |> read_int)
     | [_, s] => ~(fst (s |> (map Char.toString) o String.explode
                          |> read_int))
-    | _ => raise ERROR "Malformed numeral!"
+    | _ => (tracing (Syntax.string_of_term @{context} t); raise ERROR "Malformed numeral!")
   end
 
 (*  fun int_of_numeral t =

@@ -25,9 +25,10 @@ ML {*
 *}
 
 ML {*
-  fun fitness ctxt =
+  fun fitness ctxt consts =
     let fun goal x y = x + y
-        val f = Const ("Addition.f", @{typ "nat\<Rightarrow>nat\<Rightarrow>nat"})
+        val f = consts |> hd
+                       |> Const
         val xs = 0 upto 9
         val xs' = 1 upto (Utils.binomial_coefficient 10 2 - 1)
                     |> map (Utils.choose xs 2)
@@ -56,7 +57,7 @@ text {* We finally call the GP algorithm. *}
 
 local_setup {*
  fn lthy => 
-  case GP.evolve scheme lthy fitness finish term_size population_size generations bests mut_prob of
+  case GP.evolve false scheme lthy fitness finish term_size population_size generations bests mut_prob of
     SOME ind => (#ctxt ind)
   | NONE => lthy
 *}

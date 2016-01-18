@@ -21,9 +21,10 @@ text {* We then define the fitness function as the quadratic error, the terminat
 *}
 
 ML {*
-  fun fitness ctxt =
+  fun fitness ctxt consts =
     let fun goal x = 2 * x * x - x + 5
-        val f = Const ("SymbolicRegression.f", @{typ "int\<Rightarrow>int"})
+        val f = consts |> hd
+                       |> Const
         val xs = 0 upto 10
         val ys = map goal xs
         val rs = map (fn i => (f $ Utils.numeral_of_int ctxt i)
@@ -45,7 +46,7 @@ text {* We finally call the GP algorithm. *}
 
 local_setup {*
  fn lthy => 
-  case GP.evolve scheme lthy fitness finish term_size population_size generations bests mut_prob of
+  case GP.evolve false scheme lthy fitness finish term_size population_size generations bests mut_prob of
     SOME ind => (#ctxt ind)
   | NONE => lthy
 *}

@@ -23,9 +23,10 @@ text {* We then define the fitness function as the quadratic error, the terminat
 *}
 
 ML {*
-  fun fitness ctxt =
+  fun fitness ctxt consts =
     let fun goal x y = x * y
-        val f = Const ("Multiplication.g", @{typ "nat\<Rightarrow>nat\<Rightarrow>nat"})
+        val f = consts |> hd o tl
+                       |> Const
         val xs = 0 upto 9
         val xs' = 1 upto (Utils.binomial_coefficient 10 2 - 1)
                     |> map (Utils.choose xs 2)
@@ -43,8 +44,8 @@ ML {*
                |> Rat.rat_of_int end
   fun finish ({fit, ...} : GP.individual) = Rat.eq (Rat.zero, fit)
   val term_size = 17
-  val population_size = 200
-  val generations = 200
+  val population_size = 400
+  val generations = 400
   val bests = 1
   val mut_prob = 0.05
   val scheme = @{thm "scheme_def"}

@@ -19,7 +19,7 @@ sig
 
   val evolve : bool -> thm ->
     Proof.context ->
-    (Proof.context -> Rat.rat) ->
+    (Proof.context -> (string * typ) list -> Rat.rat) ->
     (individual -> bool) ->
     int -> int -> int -> int -> real -> individual option
 
@@ -45,7 +45,7 @@ type gp_data = { scheme : thm,
                  population_size : int,
                  bests : int,
                  mutation_prob : real,
-                 fitness : Proof.context -> Rat.rat,
+                 fitness : Proof.context -> (string * typ) list -> Rat.rat,
                  finish : individual -> bool,
                  term_count : (int * int) list list,
                  simps : thm list,
@@ -119,9 +119,40 @@ fun defining_equations scheme =
                        |> distinct (is_equal o string_ord)
   in (names, map HOLogic.mk_Trueprop eqns) end
 
+fun fname_of ctxt = 
+  let val thy = Proof_Context.theory_of ctxt
+  in
+    (fn (name, typ) => (Context.theory_name thy ^ "." ^ name, typ)) o dest_Free o fst o strip_comb o fst o HOLogic.dest_eq o
+    HOLogic.dest_Trueprop o Logic.strip_imp_concl o snd o Function_Lib.dest_all_all
+  end
+
+fun fnames_of ctxt =
+  case Function_Common.import_last_function ctxt of
+    SOME info => (case #simps info of
+                    SOME simps => simps |> map Thm.full_prop_of
+(*                                        |> tap (map (fn t => tracing (Syntax.string_of_term ctxt t)))*)
+                                        |> map (fname_of ctxt)
+                  | NONE => raise ERROR "simps of function not found!")
+  | NONE => raise ERROR "Info of function not found!"
+
+fun is_partial elims =
+  elims |> flat
+        |> map Thm.full_prop_of
+        |> exists (Term.exists_Const (fn (name, _) => name = Const_Names.undefined_name))
+
 fun well_defined lthy t =
   (t |> defining_equations
-    |> try (mutual_function lthy))
+    |> try (mutual_function lthy)
+    |> (fn res => case res of
+                   SOME ctxt => (case Function_Common.import_last_function ctxt of
+                                   SOME info => (case #elims info of
+                                                   SOME elims =>
+                                                   (if is_partial elims
+                                                    then NONE
+                                                    else SOME ctxt)
+                                                 | NONE => NONE)
+                                 | NONE => raise ERROR "Info of function not found!")
+                | NONE => NONE))
     handle TERM _ => NONE
 
 fun initial_population (data : gp_data) =
@@ -172,7 +203,7 @@ fun initial_population (data : gp_data) =
                                   (fn (ctxt, trms) =>
                                         let val rat = (TimeLimit.timeLimit
                                                         (#timeout data)
-                                                        (#fitness data) ctxt)
+                                                        ((#fitness data) ctxt) (fnames_of ctxt))
                                                         handle TimeLimit.TimeOut => (timeout_error ctxt (prep trms);
                                                                                      big_rational)
                                             val ind = mk_individual ctxt
@@ -450,7 +481,7 @@ fun next_generation (data : gp_data)
           | SOME NONE => raise ERROR "Ilegal individual!"
           | NONE   => let val rat = (TimeLimit.timeLimit
                                                         (#timeout data)
-                                                        (#fitness data) ctxt)
+                                                        ((#fitness data) ctxt) (fnames_of ctxt))
                                                         handle TimeLimit.TimeOut => (timeout_error ctxt (prep trms);
                                                                                      big_rational)
                           val ind = mk_individual ctxt

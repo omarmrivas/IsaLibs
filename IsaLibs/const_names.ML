@@ -32,6 +32,8 @@ sig
   val Minus                            : string
   val Numeral                          : string
 
+  val undefined_name                   : string
+
 end
 
 structure DB_Const_Names
@@ -61,6 +63,9 @@ val Const (Numeral, _) $ _ = @{term "2::int"}
 
 (* SAT *)
 val Const (hol_less, _) = @{term "Orderings.ord_class.less"}
+
+(* Partial Functions *)
+val Const (undefined_name, _) = @{term "undefined"}
 
 end
 

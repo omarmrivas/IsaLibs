@@ -11,17 +11,12 @@ text {* We first define the functional space.*}
 definition scheme where
 "scheme P Q \<equiv> \<exists>f::nat\<Rightarrow>nat\<Rightarrow>nat. \<forall>(x::nat) (y::nat).
   ((f 0 y = P y Suc (0::nat)) \<and>
-   (f (Suc x) y = Q x y Suc (0::nat) f))"
+   (f (Suc x) y = Q x y Suc (0::nat) (f x)))"
 
 thm scheme_def
 
 text {* We then define the fitness function as the quadratic error, the termination criterion,
   and other GP related parameters. The function we want to synthesise is addition of natural numbers.
-*}
-
-ML {*
-  val g = Utils.choose [1,2,3] 2 2
-  val rr = Utils.binomial_coefficient 10 2
 *}
 
 ML {*
@@ -46,7 +41,7 @@ ML {*
                |> Rat.rat_of_int end
   fun finish ({fit, ...} : GP.individual) = Rat.eq (Rat.zero, fit)
   val term_size = 23
-  val population_size = 200
+  val population_size = 100
   val generations = 200
   val bests = 10
   val mut_prob = 0.05

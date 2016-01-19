@@ -11,9 +11,9 @@ text {* We first define the functional space.*}
 definition scheme where
 "scheme P Q R S \<equiv> \<exists>(f::nat\<Rightarrow>nat\<Rightarrow>nat) (g::nat\<Rightarrow>nat\<Rightarrow>nat). \<forall>(x::nat) (y::nat).
   ((f 0 y = P y Suc (0::nat)) \<and>
-   (f (Suc x) y = Q x y Suc (0::nat) f) \<and>
+   (f (Suc x) y = Q x y Suc (0::nat) (f x)) \<and>
    (g 0 y = R y Suc (0::nat)) \<and>
-   (g (Suc x) y = S x y Suc (0::nat) f g))"
+   (g (Suc x) y = S x y Suc (0::nat) f (g x)))"
 
 thm scheme_def
 
@@ -44,8 +44,8 @@ ML {*
                |> Rat.rat_of_int end
   fun finish ({fit, ...} : GP.individual) = Rat.eq (Rat.zero, fit)
   val term_size = 17
-  val population_size = 400
-  val generations = 400
+  val population_size = 200
+  val generations = 100
   val bests = 1
   val mut_prob = 0.05
   val scheme = @{thm "scheme_def"}

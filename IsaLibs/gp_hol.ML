@@ -317,7 +317,7 @@ fun crossover s t =
       val _ = tracing (print_pos p2)*)
   in Envir.beta_eta_contract r end
 
-fun Crossover (global : individual option Term_Tab.table) (data : gp_data) ss tt =
+fun Crossover (global : individual option Term_Tab.table) (data : gp_data) tab ss tt =
   let val (i, (s, t)) =
                    ss |> map2 pair tt
                       |> map_index (fn x => x)
@@ -342,7 +342,7 @@ fun Crossover (global : individual option Term_Tab.table) (data : gp_data) ss tt
                                                 SOME ctxt => (tab, ctxt, nn)
                                               | NONE => f (Term_Tab.update (t', ()) tab)))
                   end
-  in f Term_Tab.empty
+  in f tab
   end
 
 (*
@@ -464,13 +464,26 @@ fun next_generation (data : gp_data)
               then print_pool' (#ctxt data) pool' 
                      |> (fn _ => ())
               else ()
-      fun new_ind global =
+      fun new_ind global tab =
           let val i1 = pool' |> Utils.weighted_choose
                              |> #genome
               val i2 = pool' |> Utils.weighted_choose
                              |> #genome
-          in i2 |> Crossover global data i1
+          in i2 |> Crossover global data tab i1
                 |> Mutation global data end
+      fun new_ind' global tab i =
+        let val (set, ctxt, trms) = new_ind global tab
+        in
+          if i < #population_size data
+          then if Term_Tab.defined global (prep trms)
+               then new_ind' global set (i + 1)
+               else (set, ctxt, trms)
+          else (set, ctxt, trms)
+        end
+      fun new_individual global =
+          1 upto Multithreading.max_threads_value ()
+            |> Par_List.get_some (fn _ => SOME (new_ind' global Term_Tab.empty 0))
+            |> the
       (* Slow part *)
       fun lookup (ctxt, trms) =
         let val i' = prep trms
@@ -494,18 +507,21 @@ fun next_generation (data : gp_data)
                            else ind
                         end
         end
-      val rest =
+      val (global', rest) =
         1 upto (#population_size data) - (#bests data)
-          |> Par_List.map (fn _ => let val (tab, ctxt, trms) = new_ind global
-                                   in (tab, lookup (ctxt, trms)) end)
+          |> pair (Term_Tab.empty, [])
+          |> Library.foldl (fn ((global, pool), _) => 
+                let val (tab, ctxt, trms) = new_individual global
+                    val global =  tab |> Term_Tab.keys
+                                      |> pair global
+                                      |> Library.foldl (fn (g, t) =>
+                                            Term_Tab.update (t, NONE) g)
+                in (global, lookup (ctxt, trms) :: pool) end)
+      val global = Term_Tab.keys global'
+                     |> pair global
+                     |> Library.foldl (fn (g, t) => Term_Tab.update (t, the (Term_Tab.lookup global' t)) g)
       val bests = take (#bests data) pool
-      val global = 
-            (global, rest)
-               |>  Library.foldl (fn (g, (tab, _)) => tab |> Term_Tab.keys
-                                                          |> pair g
-                                                          |> Library.foldl (fn (g, t) => 
-                                                              Term_Tab.update (t, NONE) g))
-  in bests @ map snd rest
+  in bests @ rest
       |> sort (Rat.ord o apply2 #fit)
       |> pair global end
 

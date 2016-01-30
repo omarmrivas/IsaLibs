@@ -23,8 +23,9 @@ ML_file "ground_completion.ML"
 ML_file "proof_tools.ML"
 ML_file "commands.ML"
 ML_file "oriented_rules.ML"
-(*ML_file "gp.ML"*)
+ML_file "gp.ML"
 ML_file "gp_hol.ML"
+ML_file "exhaust.ML"
 
 setup {*
 DB_Counter_Example.setup_use_quickcheck #>

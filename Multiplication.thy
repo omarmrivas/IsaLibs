@@ -1,5 +1,5 @@
 theory Multiplication
-imports IsaLibs
+imports "IsaLibs/IsaLibs"
 begin
 
 section {* Multiplication on Natural Numbers *}
@@ -14,6 +14,42 @@ definition scheme where
    (f (Suc x) y = Q x y Suc (0::nat) (f x)) \<and>
    (g 0 y = R y Suc (0::nat)) \<and>
    (g (Suc x) y = S x y Suc (0::nat) f (g x)))"
+
+ML {*
+  val typ_p = @{typ "nat\<Rightarrow>(nat\<Rightarrow>nat)\<Rightarrow>nat\<Rightarrow>nat"}
+  val size = 4
+  val cnt = Random_Terms.count_terms typ_p size
+  val trms = Random_Terms.enumerate_terms typ_p size
+  val _ = map (tracing o Syntax.string_of_term @{context}) trms
+*}
+
+ML {*
+  val typ_q = @{typ "nat => nat => (nat => nat) => nat => (nat => nat) => nat"}
+  val size = 10
+  val cnt = Random_Terms.count_terms typ_q size
+  val trms = Random_Terms.enumerate_terms typ_q size
+  val _ = map (tracing o Syntax.string_of_term @{context}) trms
+*}
+
+ML {*
+  val typ_r = @{typ "nat => (nat => nat) => nat => nat"}
+  val size = 4
+  val cnt = Random_Terms.count_terms typ_r size
+  val trms = Random_Terms.enumerate_terms typ_r size
+  val _ = map (tracing o Syntax.string_of_term @{context}) trms
+*}
+
+ML {*
+  val typ_s = @{typ "nat => nat => (nat => nat) => nat => (nat => nat => nat) => (nat => nat) => nat"}
+  val size = 13
+  val cnt = Random_Terms.count_terms typ_s size
+  val trms = Random_Terms.enumerate_terms typ_s size
+  val _ = map (tracing o Syntax.string_of_term @{context}) trms
+*}
+
+lemma "scheme (\<lambda>x xa xb. x) (\<lambda>x xa xb xc xd. xb (xd xa)) (\<lambda>x xa xb. xb) (\<lambda>x xa xb xc xd xe. xd (xe xa) xa)"
+apply (unfold scheme_def)
+oops
 
 thm scheme_def
 
@@ -43,9 +79,13 @@ ML {*
     in (0, ds) |> Library.foldl (op +)
                |> Rat.rat_of_int end
   fun finish ({fit, ...} : GP.individual) = Rat.eq (Rat.zero, fit)
-  val term_size = 17
-  val population_size = 200
-  val generations = 100
+  fun test ctxt consts =
+      consts |> fitness ctxt
+             |> pair Rat.zero
+             |> Rat.eq
+  val term_size = 13
+  val population_size = 400
+  val generations = 200
   val bests = 1
   val mut_prob = 0.05
   val scheme = @{thm "scheme_def"}
@@ -55,10 +95,17 @@ text {* We finally call the GP algorithm. *}
 
 local_setup {*
  fn lthy => 
-  case GP.evolve false scheme lthy fitness finish term_size population_size generations bests mut_prob of
-    SOME ind => (#ctxt ind)
+  case DB_EXHAUST.exhaust true lthy scheme term_size [] test of
+    SOME (ctxt, t, trms) => ctxt
   | NONE => lthy
 *}
+
+(*local_setup {*
+ fn lthy => 
+  case GP.evolve true scheme lthy fitness finish term_size population_size generations bests mut_prob of
+    SOME ind => (#ctxt ind)
+  | NONE => lthy
+*}*)
 
 thm f.simps
 

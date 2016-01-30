@@ -102,7 +102,7 @@ fun initial_population {function_set,
         |> sort (Rat.ord o apply2 snd)
    end
 
-fun cross s t =
+(*fun cross s t =
     let val s = Envir.eta_long [] s
         val t = Envir.eta_long [] t
         val ps = Utils.positions s
@@ -142,7 +142,7 @@ fun cross s t =
                                            |> Utils.weighted_choose
                                            |> snd
                                            |> pair (Free (s, ty))) dom
-    in (Utils.substitute (subst_atomic sigma t_q, p) s, p, q) end
+    in (Utils.substitute (subst_atomic sigma t_q, p) s, p, q) end*)
 
 (*Substitute new for free occurrences of old in a term*)
 fun subst [] = I

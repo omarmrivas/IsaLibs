@@ -1,0 +1,23 @@
+#!/bin/bash
+#
+
+FILE=$1
+LOGIC=`echo ${FILE%.*}`
+TARGET=$2
+# CDIR=`pwd`
+ROOTFILE=$LOGIC/ROOT
+
+# creating the theory directory and isabelle make files
+
+echo "Creating $LOGIC directory..."
+mkdir $LOGIC
+
+echo "Creating $LOGIC/ROOT..."
+echo "session \"$LOGIC\" = \"$TARGET\" +" > $ROOTFILE
+echo "options [document = false]" >> $ROOTFILE
+echo "theories [document = false]" >> $ROOTFILE
+echo "\"../$LOGIC\"" >> $ROOTFILE
+
+# cp $FILE $LOGIC
+
+isabelle build -b -v -D $LOGIC

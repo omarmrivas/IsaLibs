@@ -138,6 +138,7 @@ fun fnames_of ctxt =
                     SOME simps => simps |> map Thm.full_prop_of
 (*                                        |> tap (map (fn t => tracing (Syntax.string_of_term ctxt t)))*)
                                         |> map (fname_of ctxt)
+                                        |> distinct (op =)
                   | NONE => raise ERROR "simps of function not found!")
   | NONE => raise ERROR "Info of function not found!"
 

@@ -1,4 +1,0 @@
-session "Multiplication" = "HOL" +
-options [document = false]
-theories [document = false]
-"../Multiplication"

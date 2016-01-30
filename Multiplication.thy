@@ -11,45 +11,9 @@ text {* We first define the functional space.*}
 definition scheme where
 "scheme P Q R S \<equiv> \<exists>(f::nat\<Rightarrow>nat\<Rightarrow>nat) (g::nat\<Rightarrow>nat\<Rightarrow>nat). \<forall>(x::nat) (y::nat).
   ((f 0 y = P y Suc (0::nat)) \<and>
-   (f (Suc x) y = Q x y Suc (0::nat) (f x)) \<and>
+   (f (Suc x) y = Q x y Suc (0::nat) (f x y)) \<and>
    (g 0 y = R y Suc (0::nat)) \<and>
-   (g (Suc x) y = S x y Suc (0::nat) f (g x)))"
-
-ML {*
-  val typ_p = @{typ "nat\<Rightarrow>(nat\<Rightarrow>nat)\<Rightarrow>nat\<Rightarrow>nat"}
-  val size = 4
-  val cnt = Random_Terms.count_terms typ_p size
-  val trms = Random_Terms.enumerate_terms typ_p size
-  val _ = map (tracing o Syntax.string_of_term @{context}) trms
-*}
-
-ML {*
-  val typ_q = @{typ "nat => nat => (nat => nat) => nat => (nat => nat) => nat"}
-  val size = 10
-  val cnt = Random_Terms.count_terms typ_q size
-  val trms = Random_Terms.enumerate_terms typ_q size
-  val _ = map (tracing o Syntax.string_of_term @{context}) trms
-*}
-
-ML {*
-  val typ_r = @{typ "nat => (nat => nat) => nat => nat"}
-  val size = 4
-  val cnt = Random_Terms.count_terms typ_r size
-  val trms = Random_Terms.enumerate_terms typ_r size
-  val _ = map (tracing o Syntax.string_of_term @{context}) trms
-*}
-
-ML {*
-  val typ_s = @{typ "nat => nat => (nat => nat) => nat => (nat => nat => nat) => (nat => nat) => nat"}
-  val size = 13
-  val cnt = Random_Terms.count_terms typ_s size
-  val trms = Random_Terms.enumerate_terms typ_s size
-  val _ = map (tracing o Syntax.string_of_term @{context}) trms
-*}
-
-lemma "scheme (\<lambda>x xa xb. x) (\<lambda>x xa xb xc xd. xb (xd xa)) (\<lambda>x xa xb. xb) (\<lambda>x xa xb xc xd xe. xd (xe xa) xa)"
-apply (unfold scheme_def)
-oops
+   (g (Suc x) y = S x y Suc (0::nat) (f y) (g x y)))"
 
 thm scheme_def
 
@@ -61,7 +25,8 @@ text {* We then define the fitness function as the quadratic error, the terminat
 ML {*
   fun fitness ctxt consts =
     let fun goal x y = x * y
-        val f = consts |> hd o tl
+        val f = consts (* |> tap (map (tracing o fst)) *)
+                       |> hd o tl
                        |> Const
         val xs = 0 upto 9
         val xs' = 1 upto (Utils.binomial_coefficient 10 2 - 1)
@@ -84,8 +49,8 @@ ML {*
              |> pair Rat.zero
              |> Rat.eq
   val term_size = 13
-  val population_size = 400
-  val generations = 200
+  val population_size = 10
+  val generations = 100
   val bests = 1
   val mut_prob = 0.05
   val scheme = @{thm "scheme_def"}
@@ -96,7 +61,9 @@ text {* We finally call the GP algorithm. *}
 local_setup {*
  fn lthy => 
   case DB_EXHAUST.exhaust true lthy scheme term_size [] test of
-    SOME (ctxt, t, trms) => ctxt
+    SOME (ctxt, t, trms) => 
+      let val _ = map (tracing o (Syntax.string_of_term ctxt)) trms
+      in ctxt end
   | NONE => lthy
 *}
 
@@ -107,6 +74,21 @@ local_setup {*
   | NONE => lthy
 *}*)
 
+text {* Genome is composed by: 
+@{term "\<lambda>x xa xb xc xd. xd"}
+@{term "\<lambda>x xa xb. xb"}
+@{term "\<lambda>x xa xb xc. xb"}
+@{term "\<lambda>x xa xb. x"} *}
+
 thm f.simps
+thm g.simps
+
+text {* Invented functions are well-defined *}
+lemma "scheme (\<lambda>x xa xb. x) (\<lambda>x xa xb xc. xb) (\<lambda>x xa xb. xb) (\<lambda>x xa xb xc xd. xd)"
+apply (unfold scheme_def)
+apply (rule_tac x="f" in exI)
+apply (rule_tac x="g" in exI)
+apply simp
+done
 
 end

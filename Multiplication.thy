@@ -49,30 +49,30 @@ ML {*
              |> pair Rat.zero
              |> Rat.eq
   val term_size = 13
-  val population_size = 10
+  val population_size = 100
   val generations = 100
-  val bests = 1
+  val bests = 10
   val mut_prob = 0.05
   val scheme = @{thm "scheme_def"}
 *}
 
 text {* We finally call the GP algorithm. *}
 
-local_setup {*
+(*local_setup {*
  fn lthy => 
   case DB_EXHAUST.exhaust true lthy scheme term_size [] test of
     SOME (ctxt, t, trms) => 
       let val _ = map (tracing o (Syntax.string_of_term ctxt)) trms
       in ctxt end
   | NONE => lthy
-*}
+*}*)
 
-(*local_setup {*
+local_setup {*
  fn lthy => 
-  case GP.evolve true scheme lthy fitness finish term_size population_size generations bests mut_prob of
+  case GP.evolve false scheme lthy fitness finish term_size population_size generations bests mut_prob of
     SOME ind => (#ctxt ind)
   | NONE => lthy
-*}*)
+*}
 
 text {* Genome is composed by: 
 @{term "\<lambda>x xa xb xc xd. xd"}

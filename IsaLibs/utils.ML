@@ -19,6 +19,7 @@ sig
   
   (* Terms *)
   val term_to_string     : Proof.context -> term -> string
+  val int_of_string      : string -> int
   val unique_names       : term -> term
   val dummyfy_term       : term -> term
   val positions          : term -> (term * typ * int list) list
@@ -840,6 +841,17 @@ fun numeral_of_int ctxt i =
 
 fun numeral_of_nat ctxt i =
   Syntax.read_term ctxt (string_of_int i ^ "::nat")
+
+  fun int_of_string s =
+  let
+    val ss = space_explode " " s
+  in case ss of
+      [s] => fst (s |> (map Char.toString) o String.explode
+                    |> read_int)
+    | [_, s] => ~(fst (s |> (map Char.toString) o String.explode
+                         |> read_int))
+    | _ => (tracing s; raise ERROR "Malformed numeral!")
+  end
 
   fun int_of_numeral t =
   let

@@ -23,7 +23,7 @@ sig
   val well_defined : local_theory -> term -> Proof.context option
   val fnames_of    : Proof.context -> (string * typ) list
 
-  val evolve : bool -> thm ->
+  val evolve : bool -> bool -> thm ->
     Proof.context ->
     (Proof.context -> (string * typ) list -> Rat.rat) ->
     (individual -> bool) ->
@@ -56,13 +56,14 @@ type gp_data = { scheme : thm,
                  term_count : (int * int) list list,
                  simps : thm list,
                  debug : bool,
+                 parallel : bool,
                  timeout : Time.time,
                  ctxt : Proof.context}
 
 exception DONE of individual
 
 fun timeout_error ctxt t =
-  tracing ("The term " ^ Syntax.string_of_term ctxt t ^ " is terminating but the fitness function time out.")
+  tracing ("The induced functions by the term " ^ Syntax.string_of_term ctxt t ^ " are terminating but the fitness function timed out.")
 
 fun mk_individual ctxt trms subst t fit : individual = 
   {ctxt = ctxt,
@@ -95,7 +96,9 @@ fun prepare (data : gp_data) ((typs, terms) : subst) =
   (map (apply2 (Thm.ctyp_of (#ctxt data))) typs,
    map (apply2 (Thm.cterm_of (#ctxt data))) terms)
     |> (fn csubst => Drule.instantiate_normalize csubst (#scheme data))
+(*    |> tap (tracing o Utils.str_of_thms o single)*)
     |> Proof_Tools.normalise_thm (#ctxt data) (#simps data)
+(*    |> tap (tracing o Utils.str_of_thms o single)*)
     |> snd o Logic.dest_equals o Thm.full_prop_of
 
 val fun_config =
@@ -104,8 +107,6 @@ val fun_config =
 
 fun mutual_function lthy (names,eqns) =
     let val naming = map (fn x => ((Binding.qualified_name x), NONE, NoSyn)) names
-(*        val lthy' = lthy |> Named_Target.exit
-                         |> Named_Target.theory_init*)
     in
       Function_Fun.add_fun naming
                            (map (fn t => ((Binding.empty, []), t)) eqns)
@@ -114,11 +115,15 @@ fun mutual_function lthy (names,eqns) =
     end
 
 fun defining_equations scheme =
-  let val eqns =
-        scheme |> Utils.binder_elimination Const_Names.hol_exists []
-               |> fst
-               |> Utils.binder_elimination Const_Names.hol_forall []
-               |> HOLogic.dest_conj o fst
+  let fun feqns t =
+        t |> Utils.binder_elimination Const_Names.hol_exists []
+          |> fst
+          |> Utils.binder_elimination Const_Names.hol_forall []
+          |> HOLogic.dest_conj o fst
+          |> (fn eqs => case eqs of
+                         [x] => [x]
+                       | _ => maps feqns eqs)
+      val eqns = feqns scheme
       val names = eqns |> map (Term.head_of o fst o HOLogic.dest_eq)
                        |> map (fn Free (n, _) => n
                                 | _ => raise ERROR "Ilegal functional scheme!")
@@ -148,7 +153,9 @@ fun is_partial elims =
         |> exists (Term.exists_Const (fn (name, _) => name = Const_Names.undefined_name))
 
 fun well_defined lthy t =
-  (t |> defining_equations
+  (t|> tap (tracing o (Syntax.string_of_term lthy))
+    |> defining_equations
+(*    |> tap (fn (_, eqns) => (tracing o string_of_int o length) eqns)*)
     |> try (mutual_function lthy)
     |> (fn res => case res of
                    SOME ctxt => (case Function_Common.import_last_function ctxt of
@@ -161,9 +168,11 @@ fun well_defined lthy t =
                                  | NONE => raise ERROR "Info of function not found!")
                 | NONE => NONE))
     handle TERM _ => NONE
+         | ERROR _ => NONE
 
 fun initial_population (data : gp_data) =
-   let val vars = (#scheme data)
+   let val parallel = #parallel data
+       val vars = (#scheme data)
                          |> Thm.full_prop_of
                          |> (fn t => Term.add_vars t [])
        fun prep trms = trms |> mk_subst vars
@@ -198,15 +207,18 @@ fun initial_population (data : gp_data) =
                         end)
           end
        fun new_individual' ((set, unique, repeated), _) =
+         if parallel
+         then
           1 upto Multithreading.max_threads_value ()
             |> Par_List.get_some (fn _ => SOME (new_individual 0 (set, unique, repeated)))
             |> the
+         else new_individual 0 (set, unique, repeated)
    in 1 upto (#population_size data)
         |> pair (Term_Tab.empty, [], [])
         |> Library.foldl new_individual'
         |> (fn (set, unique, repeated) =>
                 let val uniques = 
-                      unique |> Par_List.map
+                      unique |> (if parallel then Par_List.map else map)
                                   (fn (ctxt, trms) =>
                                         let val rat = (TimeLimit.timeLimit
                                                         (#timeout data)
@@ -306,7 +318,7 @@ fun cross s t =
         val sigma = map (fn (s, ty) => cod |> filter (fn ((_, ty'), _) => ty = ty')
                                            |> map (fn x => (x, 1))
                                            |> Utils.weighted_choose
-                                           |> tap (fn (x, _) => tracing (s ^ "\<longrightarrow>" ^ Syntax.string_of_term @{context} (Free x)))
+(*                                           |> tap (fn (x, _) => tracing (s ^ "\<longrightarrow>" ^ Syntax.string_of_term @{context} (Free x)))*)
                                            |> snd
                                            |> pair (Free (s, ty))) dom
 (*    in (Utils.substitute (subst_atomic sigma t_q, p) s, p, q) end*)
@@ -352,6 +364,96 @@ fun Crossover (global : individual option Term_Tab.table) (data : gp_data) tab s
   in f tab
   end
 
+fun small s =
+    let val t = s
+        val s = Envir.eta_long [] s
+        val t = Envir.eta_long [] t
+        val ps = Utils.positions s
+        val qs = Utils.positions t
+        fun test dom cod =
+          forall (fn (_, ty1) => exists (fn (_, ty2) => ty1 = ty2) cod) dom
+        fun count (_, _, p) =
+          let val qs' = qs |> map (fn (t_q, _, q) =>
+                                        let val dom = Term.add_frees t_q []
+                                            val cod = Utils.bounds_at_position s p
+                                            val sigmas =
+                                              if is_prefix (op =) p q
+                                              then SOME (dom |> map (fn (_, ty) =>
+                                                            cod |> filter (fn (_, ty') => ty = ty')
+                                                                |> length))
+                                              else NONE
+                                        in case sigmas of
+                                              NONE => 0
+                                            | SOME [] => 1
+                                            | SOME sigmas => Library.foldl (op * ) (1, sigmas)
+                                        end)
+          in Library.foldl (op +) (0, qs') end
+          val ps_weighted = ps |> map (fn (t, ty, pos) =>
+                                        ((t, ty, pos), count (t, ty, pos)))
+                               |> filter (fn (_, i) => i > 0)
+        fun select ps_weighted =
+          let
+              val (s_p, tao, p) = Utils.weighted_choose ps_weighted
+              val qs' = qs |> filter (fn (t_q, ty, q) =>
+                                        let val dom = Term.add_frees t_q []
+                                            val cod = Utils.bounds_at_position s p
+                                        in ty = tao andalso
+                                           test dom cod andalso
+                                           is_prefix (op =) p q
+                                        end)
+          in if null qs'
+             then select (remove (op = o apply2 fst) ((s_p, tao, p), 0) ps_weighted)
+             else qs' |> map (fn x => (x, 1))
+                      |> Utils.weighted_choose
+                      |> pair (s_p, tao, p)
+          end
+        val ((_, _, p), (t_q, _, _)) = select ps_weighted
+        val dom = Term.add_frees t_q []
+        val cod = p |> Utils.bounds_at_position s
+                    |> rev
+                    |> map_index (fn (i, x) => (x, Bound i))
+        val sigma = map (fn (s, ty) => cod |> filter (fn ((_, ty'), _) => ty = ty')
+                                           |> map (fn x => (x, 1))
+                                           |> Utils.weighted_choose
+(*                                           |> tap (fn (x, _) => tracing (s ^ "\<longrightarrow>" ^ Syntax.string_of_term @{context} (Free x)))*)
+                                           |> snd
+                                           |> pair (Free (s, ty))) dom
+(*    in (Utils.substitute (subst_atomic sigma t_q, p) s, p, q) end*)
+    in s |> Utils.substitute (subst sigma t_q, p)
+         |> Envir.beta_eta_contract end
+(*         |> tap (fn s' => if size_of_term s' < size_of_term s
+                          then tracing "smaller"
+                          else tracing "equal") end*)
+
+fun Small (global : individual option Term_Tab.table) (data : gp_data) tab ss =
+  let  val tt = ss
+       val (i, (s, _)) =
+                   ss |> map2 pair tt
+                      |> map_index (fn x => x)
+                      |> map (fn (i, (s, t)) => ((i, (s, t)), size_of_term s + size_of_term t))
+                      |> Utils.weighted_choose
+       val vars = (#scheme data)
+                         |> Thm.full_prop_of
+                         |> (fn t => Term.add_vars t [])
+       fun prep trms = trms |> mk_subst vars
+                            |> prepare data
+       val prefix = take i ss
+       val suffix = drop (i + 1) ss
+       fun f tab = let val c = small s
+                      val nn = prefix @ [c] @ suffix
+                      val t' = prep nn
+                   in case Term_Tab.lookup global t' of
+                        SOME (SOME ind) => (tab, #ctxt ind, nn)
+                      | SOME NONE => f tab
+                      | NONE => (case Term_Tab.lookup tab t' of
+                                      SOME _ => f tab
+                                    | NONE => (case well_defined (#ctxt data) t' of
+                                                SOME ctxt => (tab, ctxt, nn)
+                                              | NONE => f (Term_Tab.update (t', ()) tab)))
+                  end
+  in f tab
+  end
+
 (*
 fun mutation prob t =
   if Random.random () <= prob
@@ -370,7 +472,7 @@ fun mutation (data : gp_data) t =
       val target_typ = bounds |> map (snd o fst)
                               |> (fn typs => typs ---> ty)
       val term_count = 1 upto (#term_size data)
-                          |> Par_List.map (fn i => (i, Random_Terms.count_terms target_typ i))
+                          |> map (fn i => (i, Random_Terms.count_terms target_typ i))
                           |> filter (fn (_, c) => c > 0)
 (*                          |> tap (map (fn (i, c) => tracing (string_of_int i ^ " : " ^ string_of_int c)))*)
       val s = term_count |> Utils.weighted_choose
@@ -478,6 +580,10 @@ fun next_generation (data : gp_data)
                              |> #genome
           in i2 |> Crossover global data Term_Tab.empty i1
                 |> Mutation global data end
+      fun new_small global =
+          let val i = pool' |> Utils.weighted_choose
+                            |> #genome
+          in Small global data Term_Tab.empty i end
       (* Slow part *)
       fun lookup (ctxt, trms) =
         let val i' = prep trms
@@ -501,10 +607,17 @@ fun next_generation (data : gp_data)
                            else ind
                         end
         end
+      val parallel = #parallel data
       val rest =
-        1 upto (#population_size data) - (#bests data)
-          |> Par_List.map (fn _ => let val (tab, ctxt, trms) = new_ind global
-                                   in (tab, lookup (ctxt, trms)) end)
+        1 upto (#population_size data) - (#bests data) - (#bests data)
+          |> (if parallel then Par_List.map else map)
+                (fn _ => let val (tab, ctxt, trms) = new_ind global
+             in (tab, lookup (ctxt, trms)) end)
+      val smaller =
+        1 upto (#bests data)
+          |> (if parallel then Par_List.map else map)
+                (fn _ => let val (tab, ctxt, trms) = new_small global
+             in (tab, lookup (ctxt, trms)) end)
       val bests = take (#bests data) pool
       val global = 
             (global, rest)
@@ -512,7 +625,12 @@ fun next_generation (data : gp_data)
                                                           |> pair g
                                                           |> Library.foldl (fn (g, t) => 
                                                               Term_Tab.update (t, NONE) g))
-  in bests @ map snd rest
+               |> rpair smaller
+               |>  Library.foldl (fn (g, (tab, _)) => tab |> Term_Tab.keys
+                                                          |> pair g
+                                                          |> Library.foldl (fn (g, t) => 
+                                                              Term_Tab.update (t, NONE) g))
+  in bests @ map snd smaller @ map snd rest
       |> sort (Rat.ord o apply2 #fit)
       |> pair global end
 
@@ -640,7 +758,7 @@ fun term_count ctxt scheme term_size =
            |> tap (map (fn (i, c) => tracing (string_of_int i ^ " : " ^ string_of_int c))))
   end
 
-fun evolve dbg scheme ctxt fitness finish term_size population_size generations bests mut_prob =
+fun evolve parallel dbg scheme ctxt fitness finish term_size population_size generations bests mut_prob =
  (let val _ = tracing "Building initial population..."
       val term_count = term_count ctxt scheme term_size
       val data : gp_data =
@@ -654,6 +772,7 @@ fun evolve dbg scheme ctxt fitness finish term_size population_size generations 
                  term_count = term_count,
                  ctxt = ctxt,
                  debug = dbg,
+                 parallel = parallel,
                  timeout = max_time_in_fitness |> Config.get ctxt
                                                |> Time.fromSeconds,
                  simps = scheme |> Thm.full_prop_of

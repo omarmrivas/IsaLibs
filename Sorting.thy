@@ -86,8 +86,8 @@ text {* We finally call the GP algorithm. *}
       in ctxt end
   | NONE => lthy
 *}*)
-
-(*local_setup {*
+(*
+local_setup {*
   fn lthy => 
   let val t = @{term "\<exists>f g. \<forall>(x::int). f x [] = [x, x, x, x] \<and>
           (\<forall>y xs. f x (y # xs) = y # y # x # f x xs \<and> g [] = [] \<and> g (x # xs) = f x (g xs))"}
@@ -110,16 +110,19 @@ text {* We finally call the GP algorithm. *}
 
 thm f.simps g.simps
 
-value "length (g [1,1,2, 4, 5])"
-
 ML {*
   val Const C = @{term "g"}
-  val r = fitness @{context} [C, C]
+  val t = Const C $ @{term "[2,5,6,3,9,0,3,3::int]"}
+  val r = Value.value @{context} t
+(*  val r2 = Code_Evaluation.dynamic_value @{context} t*)
+(*  val r3 = Code_Evaluation.dynamic_value_strict @{context} t*)
+(*  val r = fitness @{context} [C, C]*)
 *}*)
+
 
 local_setup {*
  fn lthy => 
-  case GP.evolve false false scheme lthy fitness finish term_size population_size generations bests mut_prob of
+  case GP.evolve true false scheme lthy fitness finish term_size population_size generations bests mut_prob of
     SOME ind => (#ctxt ind)
   | NONE => lthy
 *}

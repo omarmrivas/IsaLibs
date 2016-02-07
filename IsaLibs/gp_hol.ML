@@ -153,7 +153,7 @@ fun is_partial elims =
         |> exists (Term.exists_Const (fn (name, _) => name = Const_Names.undefined_name))
 
 fun well_defined lthy t =
-  (t|> tap (tracing o (Syntax.string_of_term lthy))
+  (t(*|> tap (tracing o (Syntax.string_of_term lthy))*)
     |> defining_equations
 (*    |> tap (fn (_, eqns) => (tracing o string_of_int o length) eqns)*)
     |> try (mutual_function lthy)
@@ -223,7 +223,9 @@ fun initial_population (data : gp_data) =
                                         let val rat = (TimeLimit.timeLimit
                                                         (#timeout data)
                                                         ((#fitness data) ctxt) (fnames_of ctxt))
-                                                        handle TimeLimit.TimeOut => (timeout_error ctxt (prep trms);
+                                                        handle TimeLimit.TimeOut => (if #debug data
+                                                                                     then timeout_error ctxt (prep trms)
+                                                                                     else ();
                                                                                      big_rational)
                                             val ind = mk_individual ctxt
                                                                     trms
@@ -257,7 +259,8 @@ fun initial_population (data : gp_data) =
                                                  | NONE => g
                                                  | SOME NONE => Term_Tab.update (t, NONE) g)
                 |> rpair L)
-        |> apsnd (sort (Rat.ord o apply2 #fit))
+        |> apsnd (sort ((prod_ord Rat.ord Term_Ord.term_ord) o apply2 (fn ind => (#fit ind, #norm ind))))
+(*        |> apsnd (sort ((prod_ord Rat.ord int_ord) o apply2 (fn ind => (#fit ind, #norm ind))))*)
    end
 
 (*Substitute new for free occurrences of old in a term*)
@@ -595,7 +598,9 @@ fun next_generation (data : gp_data)
           | NONE   => let val rat = (TimeLimit.timeLimit
                                                         (#timeout data)
                                                         ((#fitness data) ctxt) (fnames_of ctxt))
-                                                        handle TimeLimit.TimeOut => (timeout_error ctxt (prep trms);
+                                                        handle TimeLimit.TimeOut => (if #debug data
+                                                                                     then timeout_error ctxt (prep trms)
+                                                                                     else ();
                                                                                      big_rational)
                           val ind = mk_individual ctxt
                                                   trms
@@ -631,7 +636,8 @@ fun next_generation (data : gp_data)
                                                           |> Library.foldl (fn (g, t) => 
                                                               Term_Tab.update (t, NONE) g))
   in bests @ map snd smaller @ map snd rest
-      |> sort (Rat.ord o apply2 #fit)
+(*      |> sort (Rat.ord o apply2 #fit)*)
+      |> sort ((prod_ord Rat.ord Term_Ord.term_ord) o apply2 (fn ind => (#fit ind, #norm ind)))
       |> pair global end
 
 fun next_generation_uniques (data : gp_data)
@@ -714,7 +720,9 @@ fun next_generation_uniques (data : gp_data)
           | NONE   => let val rat = (TimeLimit.timeLimit
                                                         (#timeout data)
                                                         ((#fitness data) ctxt) (fnames_of ctxt))
-                                                        handle TimeLimit.TimeOut => (timeout_error ctxt (prep trms);
+                                                        handle TimeLimit.TimeOut => (if #debug data
+                                                                                     then timeout_error ctxt (prep trms)
+                                                                                     else ();
                                                                                      big_rational)
                           val ind = mk_individual ctxt
                                                   trms
@@ -741,7 +749,8 @@ fun next_generation_uniques (data : gp_data)
                      |> Library.foldl (fn (g, t) => Term_Tab.update (t, the (Term_Tab.lookup global' t)) g)
       val bests = take (#bests data) pool
   in bests @ rest
-      |> sort (Rat.ord o apply2 #fit)
+(*      |> sort (Rat.ord o apply2 #fit)*)
+      |> sort ((prod_ord Rat.ord Term_Ord.term_ord) o apply2 (fn ind => (#fit ind, #norm ind)))
       |> pair global end
 
 fun term_count ctxt scheme term_size =

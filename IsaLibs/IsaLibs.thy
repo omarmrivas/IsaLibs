@@ -56,7 +56,7 @@ declare [[
   simp_before = false,
   max_time_in_counter_ex = 50,
   max_time_in_proof = 20,
-  max_time_in_fitness = 5,
+  max_time_in_fitness = 10,
   max_depth_in_meta_induction = 10,
   max_num_generalizations = 3,
   max_consts_in_generalizations = 4,

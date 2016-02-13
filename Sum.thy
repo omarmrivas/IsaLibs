@@ -8,17 +8,47 @@ text {* This theory file shows how to find a function that multiplies natural nu
 
 text {* We first define the functional space.*}
 
-definition scheme where
-"scheme N \<equiv> \<exists>(f::int list\<Rightarrow>int). \<forall>(xs::int list).
-  f xs = N (\<lambda>x (y::int) z. if x then y else z)
+definition scheme_dest where
+"scheme_dest N \<equiv> \<exists>(f::int list\<Rightarrow>int). \<forall>(xs::int list).
+  f xs = N xs
+           (\<lambda>x (y::int) z. if x then y else z)
            (op = :: int list\<Rightarrow>int list\<Rightarrow>bool)
            ([] :: int list)
            (op + :: int\<Rightarrow>int\<Rightarrow>int)
            (0 :: int)
            (hd :: int list\<Rightarrow>int)
-           (tl :: int list\<Rightarrow>int list)"
+           (tl :: int list\<Rightarrow>int list)
+           f"
 
-thm scheme_def
+definition scheme_const where
+"scheme_const M N \<equiv> \<exists>(f::int list\<Rightarrow>int). \<forall>(xs::int list) (x::int).
+  (f [] = M (0::int)) \<and>
+  (f (x#xs) = N x
+                xs
+                (op + :: int\<Rightarrow>int\<Rightarrow>int)
+                f)"
+
+(*lemma "scheme_dest (\<lambda>a b c d e f g h i. b (c d a) f (e (g a) (i (h a))))"
+apply (unfold scheme_dest_def)*)
+
+(*lemma "scheme_const (\<lambda>a. a) (\<lambda>a b c d. c a (d b))"
+apply (unfold scheme_const_def)*)
+
+ML {*
+  val sizes = DB_EXHAUST.calculate_search_space @{thm scheme_dest_def} 50
+  val _ = tracing "sizes scheme_dest_def"
+  val _ = map (tracing o string_of_int o fst) sizes
+  val _ = tracing "terms scheme_dest_def"
+  val _ = map (tracing o string_of_int o snd) sizes
+*}
+
+ML {*
+  val sizes = DB_EXHAUST.calculate_search_space @{thm scheme_const_def} 50
+  val _ = tracing "sizes scheme_const_def"
+  val _ = map (tracing o string_of_int o fst) sizes
+  val _ = tracing "terms scheme_const_def"
+  val _ = map (tracing o string_of_int o snd) sizes
+*}
 
 text {* We then define the fitness function as the quadratic error, the termination criterion,
   and other GP related parameters. The function we want to synthesise multiplication in terms of 
@@ -74,12 +104,12 @@ text {* We finally call the GP algorithm. *}
   | NONE => lthy
 *}*)
 
-local_setup {*
+(*local_setup {*
  fn lthy => 
   case GP.evolve true false scheme lthy fitness finish term_size population_size generations bests mut_prob of
     SOME ind => (#ctxt ind)
   | NONE => lthy
-*}
+*}*)
 
 text {* Genome is composed by: 
 @{term "\<lambda>x xa xb xc xd. xd"}

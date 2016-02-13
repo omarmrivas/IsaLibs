@@ -34,6 +34,31 @@ fun prepare ctxt scheme simps ((typs, terms) : subst) =
 
 val block_size = 1000
 
+fun calculate_search_space scheme term_size =
+  let val ctxt = scheme |> Thm.theory_of_thm
+                        |> Context.Theory
+                        |> Context.proof_of
+      val term_count = GP.term_count ctxt scheme term_size
+      fun states f =
+        case f () of
+          SOME v => v :: states f
+        | NONE => []
+      fun sum l = Library.foldl (op +) (0, l)
+      fun mul l = Library.foldl (op *) (1, l)
+      val sts = term_count |> Utils.lazy_one_of_each
+                           |> states
+                           |> sort (int_ord o apply2 (sum o map fst))
+      val sts1 = map (fn l => ((sum o map fst) l, (mul o map snd) l)) sts
+      val sts2 = ([], sts1) |> Library.foldl (fn (((size, terms)::xs)::ys, (size', terms')) =>
+                                  if size = size'
+                                  then ((size', terms')::(size, terms)::xs)::ys
+                                  else [(size', terms')]::((size, terms)::xs)::ys
+                                | (_, (size', terms')) => [[(size', terms')]])
+                            |> rev
+                            |> map (fn ((size, trms)::xs) => (size, (mul o map snd) ((size, trms)::xs))
+                                   |_ => raise ERROR "Invalid list" )
+  in sts2 end
+
 fun exhaust debug ctxt scheme term_size simps test =
   let val vars = scheme
                    |> Thm.full_prop_of

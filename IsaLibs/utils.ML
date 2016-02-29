@@ -70,6 +70,7 @@ sig
   val rule_int_ord                     : thm -> int list
   
   (* Others *)
+  val rat_to_float       : Rat.rat -> real
   val int_of_numeral     : term -> int
   val numeral_of_int     : Proof.context -> int -> term
   val numeral_of_nat     : Proof.context -> int -> term
@@ -112,6 +113,7 @@ structure ContextSet = Table(
 (*fun safe_eval txt a f b = the_default (tracing txt; a) (try f b)*)
 fun safe_eval _ a f b = the_default a (try f b)
 
+val rat_to_float = op / o apply2 real o Rat.quotient_of_rat
 
 (* Discrete mathematics utils *)
 

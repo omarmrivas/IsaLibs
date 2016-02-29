@@ -17,6 +17,18 @@ sig
                      norm  : term,
                      fit   : Rat.rat}
 
+  type gp_statistic = {
+      best_individual : individual,
+      average_size : real,
+      average_error : real,
+      non_terminating : int,
+      equals : int
+      }
+
+  datatype gp_result =
+    Solved of individual * gp_statistic list * (int * int) option
+  | Unsolved of gp_statistic list * (int * int) option
+
   val timeout_error : Proof.context -> term -> unit
 
   val term_count   : Proof.context -> thm -> int -> (int * int) list list
@@ -27,7 +39,7 @@ sig
     Proof.context ->
     (Proof.context -> (string * typ) list -> Rat.rat) ->
     (individual -> bool) ->
-    int -> int -> int -> int -> real -> individual option
+    int -> int -> int -> int -> real -> gp_result
 
 end
 
@@ -60,6 +72,18 @@ type gp_data = { scheme : thm,
                  timeout : Time.time,
                  ctxt : Proof.context}
 
+type gp_statistic = {
+    best_individual : individual,
+    average_size : real,
+    average_error : real,
+    non_terminating : int,
+    equals : int
+ }
+
+datatype gp_result =
+    Solved of individual * gp_statistic list * (int * int) option
+  | Unsolved of gp_statistic list * (int * int) option
+
 exception DONE of individual
 
 fun timeout_error ctxt t =
@@ -71,6 +95,13 @@ fun mk_individual ctxt trms subst t fit : individual =
    subst = subst,
    norm = t,
    fit = fit}
+
+fun mk_statistic best_individual average_size average_error non_terminating equals : gp_statistic =
+   {best_individual = best_individual,
+    average_size = average_size,
+    average_error = average_error,
+    non_terminating = non_terminating,
+    equals = equals}
 
 (*fun normalise ctxt simps t =
   if can HOLogic.dest_Trueprop t
@@ -170,7 +201,7 @@ fun well_defined lthy t =
     handle TERM _ => NONE
          | ERROR _ => NONE
 
-fun initial_population (data : gp_data) =
+fun initial_population' (data : gp_data) =
    let val parallel = #parallel data
        val vars = (#scheme data)
                          |> Thm.full_prop_of
@@ -261,6 +292,80 @@ fun initial_population (data : gp_data) =
                 |> rpair L)
         |> apsnd (sort ((prod_ord Rat.ord Term_Ord.term_ord) o apply2 (fn ind => (#fit ind, #norm ind))))
 (*        |> apsnd (sort ((prod_ord Rat.ord int_ord) o apply2 (fn ind => (#fit ind, #norm ind))))*)
+   end
+
+fun initial_population (data : gp_data) =
+   let val parallel = #parallel data
+       val vars = (#scheme data)
+                         |> Thm.full_prop_of
+                         |> (fn t => Term.add_vars t [])
+       fun prep trms = trms |> mk_subst vars
+                            |> prepare data
+       fun new_individual set =
+          let val trms = vars |> map2 (fn tc => fn (_, typ) =>
+                                        tc |> Utils.weighted_choose
+                                           |> Random_Terms.random_term typ
+                                           |> the) (#term_count data)
+              val t' = prep trms
+              val wd = well_defined (#ctxt data) t'
+          in case wd of
+             SOME ctxt => (set, ctxt, trms, t')
+           | NONE => new_individual (Term_Tab.update (t', NONE) set)
+          end
+      (* Slow part *)
+      fun lookup i ctxt trms =
+         let val rat = (TimeLimit.timeLimit (#timeout data)
+                                            ((#fitness data) ctxt) (fnames_of ctxt))
+                       handle TimeLimit.TimeOut => (if #debug data
+                                                    then timeout_error ctxt (prep trms)
+                                                    else ();
+                                                    big_rational)
+             val ind = mk_individual ctxt trms
+                                     (mk_subst vars trms)
+                                     i
+                                     rat
+         in if (#finish data) ind
+            then raise DONE ind
+            else ind
+         end
+       val all = 1 upto (#population_size data)
+                    |> map (fn _ => new_individual Term_Tab.empty)
+       val all_map =
+          (Term_Tab.empty, all)
+            |> Library.foldl (fn (net, (set, ctxt, trms, i)) =>
+                                Term_Tab.update (i, (set, ctxt, trms)) net)
+            |> Term_Tab.dest
+            |> (if parallel then Par_List.map else map)
+                (fn (i, (tab, ctxt, trms)) => (i, tab, lookup i ctxt trms))
+            |> pair Term_Tab.empty
+            |> Library.foldl (fn (net, (i, tab, ind)) =>
+                                Term_Tab.update (i, (tab, ind)) net)
+       val equal_ind = length all - length (Term_Tab.dest all_map)
+       val population =
+          all
+          |> map (fn  (_, ctxt, trms, i) =>
+                  let val (_, ind) = the (Term_Tab.lookup all_map i)
+                  in mk_individual ctxt
+                                   trms
+                                   (mk_subst vars trms)
+                                   i
+                                   (#fit ind)
+                  end)
+       val global =
+            (Term_Tab.empty, Term_Tab.dest all_map)
+              |> Library.foldl (fn (g, (i, (_, ind))) =>
+                        Term_Tab.update (i, SOME ind) g)
+       val (non_terminating, global) =
+            ((0,global), all)
+               |>  Library.foldl (fn ((i,g), (tab, _, _, _)) =>
+                      tab |> Term_Tab.keys
+                          |> pair (i,g)
+                          |> Library.foldl (fn ((i,g), t) =>
+                              (i+1,Term_Tab.update (t, NONE) g)))
+   in
+      population
+        |> sort ((prod_ord Rat.ord Term_Ord.term_ord) o apply2 (fn ind => (#fit ind, #norm ind)))
+        |> pair global
    end
 
 (*Substitute new for free occurrences of old in a term*)
@@ -515,11 +620,9 @@ fun Mutation (global : individual option Term_Tab.table)
   end
   else (tab, ctxt, ss)
 
-val rat_to_float = op / o apply2 real o Rat.quotient_of_rat
-
 fun print_pool (pool : individual list) =
   pool |> map (fn ind => 
-          tracing (Syntax.string_of_term (#ctxt ind) (#norm ind) ^ " : " ^ (string_of_real o rat_to_float) (#fit ind)))
+          tracing (Syntax.string_of_term (#ctxt ind) (#norm ind) ^ " : " ^ (string_of_real o Utils.rat_to_float) (#fit ind)))
 
 fun print_pool' ctxt (pool : (individual * int) list) =
   pool |> map (fn (ind, i) => 
@@ -550,7 +653,7 @@ fun next_generation (data : gp_data)
             pool |> Metis_Useful.minimum (Rat.ord o apply2 #fit)
                  |> fst
       val _ = tracing ("Average size: " ^ string_of_real av_size)
-      val _ = tracing ("Average error: " ^ Rat.string_of_rat av_error ^ " (" ^ (string_of_real o rat_to_float) av_error ^ ")")
+      val _ = tracing ("Average error: " ^ Rat.string_of_rat av_error ^ " (" ^ (string_of_real o Utils.rat_to_float) av_error ^ ")")
       val _ = tracing ("Best error: " ^ Rat.string_of_rat (#fit bst_individual))
 (*      val _ = tracing ("Best Individual: " ^ Syntax.string_of_term (#ctxt data) (#norm bst_individual))*)
       val _ = tracing ("Normal Form: " ^ Syntax.string_of_term (#ctxt data) (#norm bst_individual))
@@ -613,7 +716,57 @@ fun next_generation (data : gp_data)
                         end
         end
       val parallel = #parallel data
+      (* new mode *)
       val rest =
+        1 upto (#population_size data) - (#bests data) - (#bests data)
+          |> (if parallel then Par_List.map else map)
+                (fn _ => let val (tab, ctxt, trms) = new_ind global
+                         in (tab, ctxt,  prep trms, trms) end)
+      val smaller =
+        1 upto (#bests data)
+          |> (if parallel then Par_List.map else map)
+                (fn _ => let val (tab, ctxt, trms) = new_small global
+                         in (tab, ctxt, prep trms, trms) end)
+      val rest_map =
+        (Term_Tab.empty, smaller @ rest)
+          |> Library.foldl (fn (net, (tab, ctxt, i, trms)) =>
+            Term_Tab.update (i, (tab, ctxt, trms)) net)
+          |> Term_Tab.dest
+          |> (if parallel then Par_List.map else map)
+              (fn (i, (tab, ctxt, trms)) => (i, tab, lookup (ctxt, trms)))
+          |> pair Term_Tab.empty
+          |>  Library.foldl (fn (net, (i, tab, ind)) =>
+            Term_Tab.update (i, (tab, ind)) net)
+      val global =
+            (global, Term_Tab.dest rest_map)
+              |> Library.foldl (fn (g, (i, (_, ind))) =>
+                        Term_Tab.update (i, SOME ind) g)
+      val equal_ind = length (smaller @ rest) - length (Term_Tab.dest rest_map)
+      val rest_ind =
+        smaller @ rest
+          |> map (fn (tab, ctxt, i, trms) =>
+                  let val (_, ind) = the (Term_Tab.lookup rest_map i)
+                  in (tab, mk_individual ctxt
+                                         trms
+                                         (mk_subst vars trms)
+                                         i
+                                         (#fit ind))
+                                         end)
+      val bests = take (#bests data) pool
+      val (non_terminating, global) =
+            ((0,global), rest @ smaller)
+               |>  Library.foldl (fn ((i,g), (tab, _, _, _)) => 
+                      tab |> Term_Tab.keys
+                          |> pair (i,g)
+                          |> Library.foldl (fn ((i,g), t) => 
+                              (i+1,Term_Tab.update (t, NONE) g)))
+  in bests @ map snd rest_ind
+      |> sort ((prod_ord Rat.ord Term_Ord.term_ord) o apply2 (fn ind => (#fit ind, #norm ind)))
+      |> pair global
+      |> pair (mk_statistic bst_individual av_size (Utils.rat_to_float av_error)
+                            non_terminating equal_ind) end
+      (* new mode *)
+(*      val rest =
         1 upto (#population_size data) - (#bests data) - (#bests data)
           |> (if parallel then Par_List.map else map)
                 (fn _ => let val (tab, ctxt, trms) = new_ind global
@@ -636,9 +789,8 @@ fun next_generation (data : gp_data)
                                                           |> Library.foldl (fn (g, t) => 
                                                               Term_Tab.update (t, NONE) g))
   in bests @ map snd smaller @ map snd rest
-(*      |> sort (Rat.ord o apply2 #fit)*)
       |> sort ((prod_ord Rat.ord Term_Ord.term_ord) o apply2 (fn ind => (#fit ind, #norm ind)))
-      |> pair global end
+      |> pair global end*)
 
 fun next_generation_uniques (data : gp_data)
                     (global : individual option Term_Tab.table, pool : individual list) =
@@ -663,7 +815,7 @@ fun next_generation_uniques (data : gp_data)
             pool |> Metis_Useful.minimum (Rat.ord o apply2 #fit)
                  |> fst
       val _ = tracing ("Average size: " ^ string_of_real av_size)
-      val _ = tracing ("Average error: " ^ Rat.string_of_rat av_error ^ " (" ^ (string_of_real o rat_to_float) av_error ^ ")")
+      val _ = tracing ("Average error: " ^ Rat.string_of_rat av_error ^ " (" ^ (string_of_real o Utils.rat_to_float) av_error ^ ")")
       val _ = tracing ("Best error: " ^ Rat.string_of_rat (#fit bst_individual))
 (*      val _ = tracing ("Best Individual: " ^ Syntax.string_of_term (#ctxt data) (#norm bst_individual))*)
       val _ = tracing ("Normal Form: " ^ Syntax.string_of_term (#ctxt data) (#norm bst_individual))
@@ -767,6 +919,13 @@ fun term_count ctxt scheme term_size =
            |> tap (map (fn (i, c) => tracing (string_of_int i ^ " : " ^ string_of_int c))))
   end
 
+fun non_terminating m =
+  let fun count (_, NONE) (n,d) = (n + 1, d + 1)
+        | count (_, SOME _) (n,d) = (n, d + 1)
+  in
+    Term_Tab.fold count m (0, 0)
+  end
+
 fun evolve parallel dbg scheme ctxt fitness finish term_size population_size generations bests mut_prob =
  (let val _ = tracing "Building initial population..."
       val term_count = term_count ctxt scheme term_size
@@ -789,16 +948,23 @@ fun evolve parallel dbg scheme ctxt fitness finish term_size population_size gen
                                 |> Utils.make_theorem_set
                                 |> tap (fn _ => tracing "Simplification rules: ")
                                 |> tap (tracing o Utils.str_of_thms)}
-      fun loop i global_pool =
+      fun loop i statistics global_pool =
         let val _ = tracing ("Generation: " ^ string_of_int i)
-        in if i < generations
-           then loop (i+1) (next_generation data global_pool)
-           else NONE
+        in if i <= generations
+           then (let val (statistic, next) = next_generation data global_pool
+                 in loop (i+1) (statistic :: statistics) next end)
+                 handle DONE ind => let val _ = tracing ("Solution: " ^ Syntax.string_of_term (#ctxt ind) (#norm ind))
+                                        val (nt, all) = non_terminating (fst global_pool)
+                                        val _ = tracing ("(" ^ string_of_int nt ^ "," ^ string_of_int all ^ ")")
+                                    in Solved (ind, rev statistics, SOME (nt, all)) end
+           else let val (nt, all) = non_terminating (fst global_pool)
+                    val _ = tracing ("(" ^ string_of_int nt ^ "," ^ string_of_int all ^ ")")
+                in Unsolved (rev statistics, SOME (nt, all)) end
         end
   in data |> initial_population
-          |> loop 1 end)
-  handle DONE ind => let val _ = tracing (Syntax.string_of_term (#ctxt ind) (#norm ind))
-                     in SOME ind end
+          |> loop 1 [] end)
+  handle DONE ind => let val _ = tracing ("Solution: " ^ Syntax.string_of_term (#ctxt ind) (#norm ind))
+                     in Solved (ind, [], NONE) end
 
 end
 

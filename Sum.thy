@@ -16,7 +16,7 @@ definition scheme_dest where
            ([] :: int list)
            (op + :: int\<Rightarrow>int\<Rightarrow>int)
            (0 :: int)
-           (hd :: int list\<Rightarrow>int)
+           (\<lambda>xs. if xs = [] then (0::int) else hd xs)
            (tl :: int list\<Rightarrow>int list)
            f"
 
@@ -34,7 +34,7 @@ apply (unfold scheme_dest_def)*)
 (*lemma "scheme_const (\<lambda>a. a) (\<lambda>a b c d. c a (d b))"
 apply (unfold scheme_const_def)*)
 
-ML {*
+(*ML {*
   val sizes = DB_EXHAUST.calculate_search_space @{thm scheme_dest_def} 50
   val _ = tracing "sizes scheme_dest_def"
   val _ = map (tracing o string_of_int o fst) sizes
@@ -48,7 +48,7 @@ ML {*
   val _ = map (tracing o string_of_int o fst) sizes
   val _ = tracing "terms scheme_const_def"
   val _ = map (tracing o string_of_int o snd) sizes
-*}
+*}*)
 
 text {* We then define the fitness function as the quadratic error, the termination criterion,
   and other GP related parameters. The function we want to synthesise multiplication in terms of 
@@ -85,57 +85,51 @@ ML {*
       consts |> fitness ctxt
              |> pair Rat.zero
              |> Rat.eq
-  val term_size = 50
+  val term_size = 40
   val population_size = 200
-  val generations = 200
+  val generations = 100
   val bests = 10
   val mut_prob = 0.05
-  val scheme = @{thm "scheme_def"}
+  val scheme_dest = @{thm "scheme_dest_def"}
+  val scheme_const = @{thm "scheme_const_def"}
+  val experiments = 20
 *}
+
+(*fun f where
+"f (xs::int list) = (if [] = xs then 0 else (if xs = [] then 0 else hd xs) + f (tl xs))"
+
+local_setup {*
+  fn lthy =>
+    let val Const C = @{term "f"}
+    val v = Rat.string_of_rat (fitness lthy [C])
+    val _ = tracing v
+  in lthy end
+*}*)
 
 text {* We finally call the GP algorithm. *}
 
-(*local_setup {*
+local_setup {*
  fn lthy => 
-  case DB_EXHAUST.exhaust true lthy scheme term_size [] test of
-    SOME (ctxt, t, trms) => 
-      let val _ = map (tracing o (Syntax.string_of_term ctxt)) trms
-      in ctxt end
-  | NONE => lthy
-*}*)
-
-(*local_setup {*
- fn lthy => 
-  case GP.evolve true false scheme lthy fitness finish term_size population_size generations bests mut_prob of
-    SOME ind => (#ctxt ind)
-  | NONE => lthy
-*}*)
-
-text {* Genome is composed by: 
-@{term "\<lambda>x xa xb xc xd. xd"}
-@{term "\<lambda>x xa xb. xb"}
-@{term "\<lambda>x xa xb xc. xb"}
-@{term "\<lambda>x xa xb. x"} *}
-
-thm f.simps
-thm g.simps
-
-ML {*
-  val Const C = @{term "g"}
-  val r = fitness @{context} [C,C]
+    let val sts1 =
+      1 upto experiments
+        |> map (fn _ => GP.evolve true false scheme_const lthy fitness finish
+                                  term_size population_size generations bests mut_prob)
+        val (eqs1, alleq1) = GNU_Plot.gp_statistics_to_equals population_size sts1
+        val _ = tracing ("gp_statistics_to_equals Constructive: (" ^ string_of_int eqs1 ^ ", " ^ string_of_int alleq1 ^ ")")
+        val (nt1, allnt1) = GNU_Plot.gp_statistics_to_non_terminating sts1
+        val _ = tracing ("gp_statistics_to_non_terminating Constructive: (" ^ string_of_int nt1 ^ ", " ^ string_of_int allnt1 ^ ")")
+        val _ = GNU_Plot.gp_statistics_to_error_plot "SumConsts" generations sts1
+        val sts2 =
+      1 upto experiments
+        |> map (fn _ => GP.evolve true false scheme_dest lthy fitness finish
+                                  term_size population_size generations bests mut_prob)
+        val (eqs2, alleq2) = GNU_Plot.gp_statistics_to_equals population_size sts2
+        val _ = tracing ("gp_statistics_to_equals Destructive: (" ^ string_of_int eqs2 ^ ", " ^ string_of_int alleq2 ^ ")")
+        val (nt2, allnt2) = GNU_Plot.gp_statistics_to_non_terminating sts2
+        val _ = tracing ("gp_statistics_to_non_terminating Destructive: (" ^ string_of_int nt2 ^ ", " ^ string_of_int allnt2 ^ ")")
+        val _ = GNU_Plot.gp_statistics_to_error_plot "SumDest" generations sts2
+        val _ = GNU_Plot.gp_statistics_to_cumulative_prob_plot "Sum" generations sts1 sts2
+    in lthy end
 *}
-
-value "g 0 0"
-
-lemma "g x y = ackermann x y"
-nitpick
-
-text {* Invented functions are well-defined *}
-lemma "scheme (\<lambda>x xa xb. x) (\<lambda>x xa xb xc. xb) (\<lambda>x xa xb. xb) (\<lambda>x xa xb xc xd. xd)"
-apply (unfold scheme_def)
-apply (rule_tac x="f" in exI)
-apply (rule_tac x="g" in exI)
-apply simp
-done
 
 end

@@ -3,7 +3,7 @@
 
 FILE=$1
 LOGIC=`echo ${FILE%.*}`
-TARGET=$2
+TARGET="HOL"
 # CDIR=`pwd`
 ROOTFILE=$LOGIC/ROOT
 

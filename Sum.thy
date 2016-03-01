@@ -22,33 +22,11 @@ definition scheme_dest where
 
 definition scheme_const where
 "scheme_const M N \<equiv> \<exists>(f::int list\<Rightarrow>int). \<forall>(xs::int list) (x::int).
-  (f [] = M (0::int)) \<and>
+  (f [] = (0::int)) \<and>
   (f (x#xs) = N x
                 xs
                 (op + :: int\<Rightarrow>int\<Rightarrow>int)
                 f)"
-
-(*lemma "scheme_dest (\<lambda>a b c d e f g h i. b (c d a) f (e (g a) (i (h a))))"
-apply (unfold scheme_dest_def)*)
-
-(*lemma "scheme_const (\<lambda>a. a) (\<lambda>a b c d. c a (d b))"
-apply (unfold scheme_const_def)*)
-
-(*ML {*
-  val sizes = DB_EXHAUST.calculate_search_space @{thm scheme_dest_def} 50
-  val _ = tracing "sizes scheme_dest_def"
-  val _ = map (tracing o string_of_int o fst) sizes
-  val _ = tracing "terms scheme_dest_def"
-  val _ = map (tracing o string_of_int o snd) sizes
-*}
-
-ML {*
-  val sizes = DB_EXHAUST.calculate_search_space @{thm scheme_const_def} 50
-  val _ = tracing "sizes scheme_const_def"
-  val _ = map (tracing o string_of_int o fst) sizes
-  val _ = tracing "terms scheme_const_def"
-  val _ = map (tracing o string_of_int o snd) sizes
-*}*)
 
 text {* We then define the fitness function as the quadratic error, the termination criterion,
   and other GP related parameters. The function we want to synthesise multiplication in terms of 
@@ -85,7 +63,7 @@ ML {*
       consts |> fitness ctxt
              |> pair Rat.zero
              |> Rat.eq
-  val term_size = 40
+  val term_size = 35
   val population_size = 200
   val generations = 100
   val bests = 10
@@ -95,30 +73,11 @@ ML {*
   val experiments = 20
 *}
 
-(*fun f where
-"f (xs::int list) = (if [] = xs then 0 else (if xs = [] then 0 else hd xs) + f (tl xs))"
-
-local_setup {*
-  fn lthy =>
-    let val Const C = @{term "f"}
-    val v = Rat.string_of_rat (fitness lthy [C])
-    val _ = tracing v
-  in lthy end
-*}*)
-
 text {* We finally call the GP algorithm. *}
 
 local_setup {*
  fn lthy => 
-    let val sts1 =
-      1 upto experiments
-        |> map (fn _ => GP.evolve true false scheme_const lthy fitness finish
-                                  term_size population_size generations bests mut_prob)
-        val (eqs1, alleq1) = GNU_Plot.gp_statistics_to_equals population_size sts1
-        val _ = tracing ("gp_statistics_to_equals Constructive: (" ^ string_of_int eqs1 ^ ", " ^ string_of_int alleq1 ^ ")")
-        val (nt1, allnt1) = GNU_Plot.gp_statistics_to_non_terminating sts1
-        val _ = tracing ("gp_statistics_to_non_terminating Constructive: (" ^ string_of_int nt1 ^ ", " ^ string_of_int allnt1 ^ ")")
-        val _ = GNU_Plot.gp_statistics_to_error_plot "SumConsts" generations sts1
+    let 
         val sts2 =
       1 upto experiments
         |> map (fn _ => GP.evolve true false scheme_dest lthy fitness finish
@@ -128,6 +87,16 @@ local_setup {*
         val (nt2, allnt2) = GNU_Plot.gp_statistics_to_non_terminating sts2
         val _ = tracing ("gp_statistics_to_non_terminating Destructive: (" ^ string_of_int nt2 ^ ", " ^ string_of_int allnt2 ^ ")")
         val _ = GNU_Plot.gp_statistics_to_error_plot "SumDest" generations sts2
+val sts1 =
+      1 upto experiments
+        |> map (fn _ => GP.evolve true false scheme_const lthy fitness finish
+                                  term_size population_size generations bests mut_prob)
+        val (eqs1, alleq1) = GNU_Plot.gp_statistics_to_equals population_size sts1
+        val _ = tracing ("gp_statistics_to_equals Constructive: (" ^ string_of_int eqs1 ^ ", " ^ string_of_int alleq1 ^ ")")
+        val (nt1, allnt1) = GNU_Plot.gp_statistics_to_non_terminating sts1
+        val _ = tracing ("gp_statistics_to_non_terminating Constructive: (" ^ string_of_int nt1 ^ ", " ^ string_of_int allnt1 ^ ")")
+        val _ = GNU_Plot.gp_statistics_to_error_plot "SumConsts" generations sts1
+
         val _ = GNU_Plot.gp_statistics_to_cumulative_prob_plot "Sum" generations sts1 sts2
     in lthy end
 *}

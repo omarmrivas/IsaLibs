@@ -33,18 +33,19 @@ fun gp_statistics_to_error_plot file generations (sts : gp_result list) =
         | reduce (Unsolved (_ :: sts, s)) = Unsolved (sts, s)
       val datafile = file ^ "Error.data"
       val plotfile = file ^ "Error.plot"
+      val experiments = length sts
       val _ =
         let val header =["set terminal epslatex color\n",
                          "set output \"" ^ file ^ "Error.tex\"\n",
                          "set format xy \"$%g$\"\n",
                          "set title \"Error\"\n",
-                         "set xrange [0.0:100.0]",
-                         "set yrange [0.0:1.0]",
+                         "set xrange [0.0:100.0]\n",
+                         "set yrange [0.0:1.0]\n",
                          "set xlabel \"Generation\"\n",
                          "set ylabel \"Minimum error\"\n"]
-            val body = 3 upto generations + 2
+            val body = 3 upto experiments + 2
                         |> map (fn i => "     \"" ^ datafile ^ "\" using 1:" ^ string_of_int i ^
-                                        " title \"\" with lines lt rgb \"#7F7F7F\", \\\n")
+                                        " title \"\" with lines lw 3 lt rgb \"#7F7F7F\", \\\n")
                         |> (fn strs => ("plot \"" ^ datafile ^ "\" using 1:2" ^
                                         " title \"\" with lines lt rgb \"#000000\", \\\n") :: strs)
         in (header @ body)
@@ -69,7 +70,7 @@ fun gp_statistics_to_cumulative_prob generations (sts : gp_result list) =
         | reduce (Solved (ind, _ :: sts, s)) = Solved (ind, sts, s)
         | reduce (Unsolved ([], _)) = raise ERROR "Can not reduce"
         | reduce (Unsolved (_ :: sts, s)) = Unsolved (sts, s)
-      val trials = real (length sts * generations)
+      val trials = real (length sts)
   in 0 upto generations - 1
        |> pair ([], sts)
        |> Library.foldl (fn ((R, sts), _) =>
@@ -94,14 +95,14 @@ fun gp_statistics_to_cumulative_prob_plot file generations (sts1 : gp_result lis
                          "set output \"" ^ file ^ "Cumulative.tex\"\n",
                          "set format xy \"$%g$\"\n",
                          "set title \"Cumulative Probability of Success (CPS)\"\n",
-                         "set xrange [0.0:100.0]",
-                         "set yrange [0.0:1.0]",
+                         "set xrange [0.0:100.0]\n",
+                         "set yrange [0.0:1.0]\n",
                          "set xlabel \"Generation\"\n",
                          "set ylabel \"CPS\"\n"]
             val body = ["plot \"" ^ datafile ^ "\" using 1:2" ^
-                        " title \"Constructive\" with lines lt rgb \"#0000FF\", \\\n",
+                        " title \"Constructive\" with lines lw 3 lt rgb \"#0000FF\", \\\n",
                         "     \"" ^ datafile ^ "\" using 1:3" ^
-                        " title \"Destructive\" with lines lt rgb \"#FF0000\", \\\n"]
+                        " title \"Destructive\" with lines lw 3 lt rgb \"#FF0000\", \\\n"]
         in (header @ body)
             |> File.write_list (Path.explode plotfile) end
   in 0 upto generations - 1

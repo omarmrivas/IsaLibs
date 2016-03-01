@@ -309,8 +309,14 @@ fun initial_population (data : gp_data) =
               val t' = prep trms
               val wd = well_defined (#ctxt data) t'
           in case wd of
-             SOME ctxt => (set, ctxt, trms, t')
-           | NONE => new_individual (Term_Tab.update (t', NONE) set)
+             SOME ctxt => let val _ = if #debug data
+                                      then ()(*tracing (Syntax.string_of_term ctxt t')*)
+                                      else ()
+                          in (set, ctxt, trms, t') end
+           | NONE => let val _ = if #debug data
+                                      then ()(*tracing ("bad: " ^ Syntax.string_of_term (#ctxt data) t')*)
+                                      else ()
+                     in new_individual (Term_Tab.update (t', NONE) set) end
           end
       (* Slow part *)
       fun lookup i ctxt trms =
@@ -329,7 +335,8 @@ fun initial_population (data : gp_data) =
             else ind
          end
        val all = 1 upto (#population_size data)
-                    |> map (fn _ => new_individual Term_Tab.empty)
+                    |> (if parallel then Par_List.map else map) 
+                          (fn _ => new_individual Term_Tab.empty)
        val all_map =
           (Term_Tab.empty, all)
             |> Library.foldl (fn (net, (set, ctxt, trms, i)) =>

@@ -1,0 +1,4 @@
+session "Sum" = "HOL" +
+options [document = false]
+theories [document = false]
+"../Sum"

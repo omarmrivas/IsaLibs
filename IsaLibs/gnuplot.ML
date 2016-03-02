@@ -45,9 +45,9 @@ fun gp_statistics_to_error_plot file generations (sts : gp_result list) =
                          "set ylabel \"Minimum error\"\n"]
             val body = 3 upto experiments + 2
                         |> map (fn i => "     \"" ^ datafile ^ "\" using 1:" ^ string_of_int i ^
-                                        " title \"\" with lines lw 3 lt rgb \"#7F7F7F\", \\\n")
+                                        " title \"\" with lines lt rgb \"#7F7F7F\", \\\n")
                         |> (fn strs => ("plot \"" ^ datafile ^ "\" using 1:2" ^
-                                        " title \"\" with lines lt rgb \"#000000\", \\\n") :: strs)
+                                        " title \"\" with lines lw 3 lt rgb \"#000000\", \\\n") :: strs)
         in (header @ body)
             |> File.write_list (Path.explode plotfile) end
   in 0 upto generations - 1

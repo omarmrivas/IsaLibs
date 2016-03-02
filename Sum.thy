@@ -21,7 +21,7 @@ definition scheme_dest where
            f"
 
 definition scheme_const where
-"scheme_const M N \<equiv> \<exists>(f::int list\<Rightarrow>int). \<forall>(xs::int list) (x::int).
+"scheme_const N \<equiv> \<exists>(f::int list\<Rightarrow>int). \<forall>(xs::int list) (x::int).
   (f [] = (0::int)) \<and>
   (f (x#xs) = N x
                 xs

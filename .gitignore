@@ -1,6 +1,7 @@
 # Isabelle
 document
 output
+experiments
 .IsaLibs.thy.marks
 
 # Misc

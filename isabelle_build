@@ -5,12 +5,12 @@ FILE=$1
 LOGIC=`echo ${FILE%.*}`
 TARGET="HOL"
 # CDIR=`pwd`
-ROOTFILE=$LOGIC/ROOT
+ROOTFILE=experiments/$LOGIC/ROOT
 
 # creating the theory directory and isabelle make files
 
 echo "Creating $LOGIC directory..."
-mkdir $LOGIC
+mkdir experiments/$LOGIC
 
 echo "Creating $LOGIC/ROOT..."
 echo "session \"$LOGIC\" = \"$TARGET\" +" > $ROOTFILE

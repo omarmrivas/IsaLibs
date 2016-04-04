@@ -12,7 +12,6 @@ sig
   val gp_statistics_to_cumulative_prob_plot : string -> int -> GP.gp_result list -> 
                                               GP.gp_result list -> unit
   val gp_statistics_to_equals               : int -> GP.gp_result list -> int * int
-  val gp_statistics_to_non_terminating      : GP.gp_result list -> int * int
 end
 
 structure DB_GNU_Plot
@@ -23,14 +22,14 @@ open GP
 
 fun gp_statistics_to_error_plot file generations (sts : gp_result list) =
   let fun div_by_10 x = x / 10.0
-      fun extract (Solved (ind, [], _)) = (div_by_10 o Utils.rat_to_float o #fit) ind
-        | extract (Solved (_, (st :: _), _)) = (div_by_10 o Utils.rat_to_float o #fit o #best_individual) st
-        | extract (Unsolved ([], _)) = raise ERROR "Can not get statistics"
-        | extract (Unsolved (st :: _, _)) = (div_by_10 o Utils.rat_to_float o #fit o #best_individual) st
-      fun reduce (Solved (ind, [], s)) = Solved (ind, [], s)
-        | reduce (Solved (ind, _ :: sts, s)) = Solved (ind, sts, s)
-        | reduce (Unsolved ([], _)) = raise ERROR "Can not reduce"
-        | reduce (Unsolved (_ :: sts, s)) = Unsolved (sts, s)
+      fun extract (Solved (ind, [])) = (div_by_10 o Utils.rat_to_float o #fit) ind
+        | extract (Solved (_, (st :: _))) = (div_by_10 o Utils.rat_to_float o #fit o #best_individual) st
+        | extract (Unsolved []) = raise ERROR "Can not get statistics"
+        | extract (Unsolved (st :: _)) = (div_by_10 o Utils.rat_to_float o #fit o #best_individual) st
+      fun reduce (Solved (ind, [])) = Solved (ind, [])
+        | reduce (Solved (ind, _ :: sts)) = Solved (ind, sts)
+        | reduce (Unsolved []) = raise ERROR "Can not reduce"
+        | reduce (Unsolved (_ :: sts)) = Unsolved sts
       val datafile = file ^ "Error.data"
       val plotfile = file ^ "Error.plot"
       val experiments = length sts
@@ -62,14 +61,14 @@ fun gp_statistics_to_error_plot file generations (sts : gp_result list) =
   end
 
 fun gp_statistics_to_cumulative_prob generations (sts : gp_result list) =
-  let fun extract (Solved (ind, [], _)) = #fit ind
-        | extract (Solved (_, st :: _, _)) = (#fit o #best_individual) st
-        | extract (Unsolved ([], _)) = raise ERROR "Can not get statistics"
-        | extract (Unsolved (st :: _, _)) = (#fit o #best_individual) st
-      fun reduce (Solved (ind, [], s)) = Solved (ind, [], s)
-        | reduce (Solved (ind, _ :: sts, s)) = Solved (ind, sts, s)
-        | reduce (Unsolved ([], _)) = raise ERROR "Can not reduce"
-        | reduce (Unsolved (_ :: sts, s)) = Unsolved (sts, s)
+  let fun extract (Solved (ind, [])) = #fit ind
+        | extract (Solved (_, st :: _)) = (#fit o #best_individual) st
+        | extract (Unsolved []) = raise ERROR "Can not get statistics"
+        | extract (Unsolved (st :: _)) = (#fit o #best_individual) st
+      fun reduce (Solved (ind, [])) = Solved (ind, [])
+        | reduce (Solved (ind, _ :: sts)) = Solved (ind, sts)
+        | reduce (Unsolved []) = raise ERROR "Can not reduce"
+        | reduce (Unsolved (_ :: sts)) = Unsolved sts
       val trials = real (length sts)
   in 0 upto generations - 1
        |> pair ([], sts)
@@ -115,23 +114,14 @@ fun gp_statistics_to_cumulative_prob_plot file generations (sts1 : gp_result lis
        |> File.write_list (Path.explode datafile)
   end
 
-fun gp_statistics_to_non_terminating (sts : gp_result list) =
-  let fun count ((nt, all), (Solved (_, _, SOME (nt', all')))) = (nt+nt', all+all')
-        | count ((nt, all), (Unsolved (_, SOME (nt', all')))) = (nt+nt', all+all')
-        | count ((nt, all), _) = (nt, all)
-  in
-  ((0, 0), sts)
-    |> Library.foldl count
-  end
-
-fun gp_result_to_equals (Solved (_, sts, _)) =
+fun gp_result_to_equals (Solved (_, sts)) =
   Library.foldl (fn (s, st) => #equals st + s) (0, sts)
-  | gp_result_to_equals (Unsolved (sts, _)) =
+  | gp_result_to_equals (Unsolved sts) =
   Library.foldl (fn (s, st) => #equals st + s) (0, sts)
 
 fun gp_statistics_to_equals population_size (sts : gp_result list) =
-  let fun processed (Solved (_, sts,  _)) = population_size * length sts
-        | processed (Unsolved (sts, _)) = population_size * length sts
+  let fun processed (Solved (_, sts)) = population_size * length sts
+        | processed (Unsolved sts) = population_size * length sts
       val eqs = sts |> map gp_result_to_equals
          |> pair 0
          |> Library.foldl (op +)

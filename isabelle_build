@@ -16,8 +16,8 @@ echo "Creating $LOGIC/ROOT..."
 echo "session \"$LOGIC\" = \"$TARGET\" +" > $ROOTFILE
 echo "options [document = false]" >> $ROOTFILE
 echo "theories [document = false]" >> $ROOTFILE
-echo "\"../$LOGIC\"" >> $ROOTFILE
+echo "\"../../$LOGIC\"" >> $ROOTFILE
 
 # cp $FILE $LOGIC
 
-isabelle build -b -v -D $LOGIC
+isabelle build -b -v -D experiments/$LOGIC

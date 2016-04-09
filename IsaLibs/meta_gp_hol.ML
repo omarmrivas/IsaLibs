@@ -34,7 +34,7 @@ sig
   val well_defined : local_theory -> term -> Proof.context option
   val fnames_of    : Proof.context -> (string * typ) list
 
-  val evolve : bool -> bool -> thm -> term list ->
+  val evolve : bool -> bool -> thm -> term list -> int -> Rat.rat ->
     Proof.context ->
     (Proof.context -> term list -> Rat.rat) ->
     (individual -> bool) ->
@@ -58,12 +58,15 @@ type individual = {ctxt  : Proof.context,
                    fit   : Rat.rat}
 
 type gp_data = { scheme : thm,
-                 terminating_closures : term list,
+                 terminating_closures : thm list,
+                 simps_of_closures : thm list list,
                  term_size : int,
+                 recursive_calls : int,
                  population_size : int,
                  bests : int,
                  mutation_prob : real,
                  fitness : Proof.context -> term list -> Rat.rat,
+                 bad_fitness : Rat.rat,
                  finish : individual -> bool,
                  term_count : (int * int) list list,
                  simps : thm list,
@@ -135,6 +138,42 @@ fun prepare (data : gp_data) ((typs, terms) : subst) =
     |> Proof_Tools.normalise_thm (#ctxt data) (#simps data)
 (*    |> tap (tracing o Utils.str_of_thms o single)*)
     |> snd o Logic.dest_equals o Thm.full_prop_of
+
+fun prepare_closure (data : gp_data) simp ((typs, terms) : subst) =
+  (map (apply2 (Thm.ctyp_of (#ctxt data))) typs,
+   map (apply2 (Thm.cterm_of (#ctxt data))) terms)
+    |> (fn csubst => Drule.instantiate_normalize csubst simp)
+    |> Thm.full_prop_of
+    |> HOLogic.dest_Trueprop
+    |> HOLogic.dest_eq
+    |> strip_comb o fst
+    |> apsnd (take 2)
+    |> list_comb
+
+fun count_rcalls (data : gp_data) f simp ((typs, terms) : subst) =
+  (map (apply2 (Thm.ctyp_of (#ctxt data))) typs,
+   map (apply2 (Thm.cterm_of (#ctxt data))) terms)
+    |> (fn csubst => Drule.instantiate_normalize csubst simp)
+    |> Thm.full_prop_of
+    |> HOLogic.dest_Trueprop
+    |> HOLogic.dest_eq
+    |> snd
+    |> (fn t => fold_aterms (fn t => fn c => if t = f
+                                             then c + 1
+                                             else c) t 0)
+
+fun recursive_calls_ok (data : gp_data) fs ((typs, terms) : subst) =
+  let fun get_f t = t |> dest_comb
+                      |> fst
+      val simps = flat (#simps_of_closures data)
+  in fs |> map (fn simp => (get_f simp, simps))
+        |> forall (fn (f, simps) =>  
+                      forall (fn simp => count_rcalls data f simp (typs, terms) 
+                                          <= (#recursive_calls data)) simps)
+  end
+(*  (#closures data) ~~ (#simps_of_closures data)
+    |> forall (fn (fs, simps) =>
+                forall (fn simp => count_rcalls data f simp (typs, terms) <= (#recursive_calls data)) simps)*)
 
 val fun_config =
   Function_Common.FunctionConfig { sequential=true, default= NONE (*FIXME dynamic scoping*),
@@ -211,7 +250,11 @@ fun initial_population (data : gp_data) =
                          |> Thm.full_prop_of
                          |> (fn t => Term.add_vars t [])
        fun prep trms = trms |> mk_subst vars
-                                 |> prepare data
+                            |> prepare data
+       fun prep_closure trms thm = trms |> mk_subst vars
+                                        |> prepare_closure data thm
+       fun calls_ok fs trms = trms |> mk_subst vars
+                                   |> recursive_calls_ok data fs
        fun new_individual () =
           let val trms = vars |> map2 (fn tc => fn (_, typ) =>
                                         tc |> Utils.weighted_choose
@@ -221,8 +264,10 @@ fun initial_population (data : gp_data) =
           in (trms, t') end
       (* Slow part *)
       fun lookup i ctxt trms =
-         let val closures = map (list_comb o rpair trms) (#terminating_closures data)
-             val rat = (#fitness data) ctxt closures
+         let val closures = map (prep_closure trms) (#terminating_closures data)
+             val rat = if calls_ok closures trms
+                       then (#fitness data) ctxt closures
+                       else (#bad_fitness data)
              val ind = mk_individual ctxt trms
                                      (mk_subst vars trms)
                                      i
@@ -479,6 +524,10 @@ fun next_generation (data : gp_data)
                          |> (fn t => Term.add_vars t [])
       fun prep trms = trms |> mk_subst vars
                            |> prepare data
+      fun prep_closure trms thm = trms |> mk_subst vars
+                                       |> prepare_closure data thm
+      fun calls_ok fs trms = trms |> mk_subst vars
+                                  |> recursive_calls_ok data fs
       val pool' = map (fn {ctxt, genome,
                            subst, norm,
                            fit} => fit |> Rat.inv
@@ -519,8 +568,11 @@ fun next_generation (data : gp_data)
         case Term_Tab.lookup global i' of
             SOME ind => mk_individual ctxt trms (mk_subst vars trms)
                                       i' (#fit ind)
-          | NONE   => let val closures = map (list_comb o rpair trms) (#terminating_closures data)
-                          val rat = (#fitness data) ctxt closures
+          | NONE   => let val closures = map (prep_closure trms) (#terminating_closures data)
+(*                          val rat = (#fitness data) ctxt closures*)
+                          val rat = if calls_ok closures trms
+                                    then (#fitness data) ctxt closures
+                                    else (#bad_fitness data)
                           val ind = mk_individual ctxt trms
                                                   (mk_subst vars trms)
                                                   i' rat
@@ -584,13 +636,19 @@ fun term_count ctxt scheme term_size =
            |> tap (map (fn (i, c) => tracing (string_of_int i ^ " : " ^ string_of_int c))))
   end
 
-fun evolve parallel dbg scheme terminating_closures ctxt fitness finish term_size population_size generations bests mut_prob =
+fun evolve parallel dbg scheme terminating_closures recursive_calls bad_fitness ctxt fitness finish term_size population_size generations bests mut_prob =
  (let val _ = tracing "Building initial population..."
       val term_count = term_count ctxt scheme term_size
+      val thy = Proof_Context.theory_of ctxt
+      val simps_of_closures = map (fn Const (n, _) => Utils.get_rewrites thy n
+                                  | _ => raise ERROR "Not ") terminating_closures
       val data : gp_data =
                { scheme = scheme,
-                 terminating_closures = terminating_closures,
+                 simps_of_closures = simps_of_closures,
+                 terminating_closures = map hd simps_of_closures,
                  term_size = term_size,
+                 recursive_calls = recursive_calls,
+                 bad_fitness = bad_fitness,
                  population_size = population_size,
                  bests = bests,
                  mutation_prob = mut_prob,

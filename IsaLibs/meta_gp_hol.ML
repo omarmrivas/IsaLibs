@@ -147,7 +147,7 @@ fun prepare_closure (data : gp_data) simp ((typs, terms) : subst) =
     |> HOLogic.dest_Trueprop
     |> HOLogic.dest_eq
     |> strip_comb o fst
-    |> apsnd (take 2)
+    |> apsnd (take (length terms))
     |> list_comb
 
 fun count_rcalls (data : gp_data) f simp ((typs, terms) : subst) =
@@ -163,11 +163,12 @@ fun count_rcalls (data : gp_data) f simp ((typs, terms) : subst) =
                                              else c) t 0)
 
 fun recursive_calls_ok (data : gp_data) fs ((typs, terms) : subst) =
-  let fun get_f t = t |> dest_comb
+  let fun get_f t = t |> strip_comb
                       |> fst
       val simps = flat (#simps_of_closures data)
   in fs |> map (fn simp => (get_f simp, simps))
-        |> forall (fn (f, simps) =>  
+(*        |> tap (map (fn (f, simps) => tracing (Syntax.string_of_term (#ctxt data) f ^ ":" ^  Utils.str_of_thms simps)))*)
+        |> forall (fn (f, simps) =>
                       forall (fn simp => count_rcalls data f simp (typs, terms) 
                                           <= (#recursive_calls data)) simps)
   end
@@ -265,6 +266,8 @@ fun initial_population (data : gp_data) =
       (* Slow part *)
       fun lookup i ctxt trms =
          let val closures = map (prep_closure trms) (#terminating_closures data)
+(*             val _ = tracing "Closures: "
+             val _ = map (tracing o (Syntax.string_of_term ctxt)) closures*)
              val rat = if calls_ok closures trms
                        then (#fitness data) ctxt closures
                        else (#bad_fitness data)

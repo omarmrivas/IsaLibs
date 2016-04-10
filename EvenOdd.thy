@@ -129,7 +129,7 @@ ML {*
       consts |> fitness ctxt
              |> pair Rat.zero
              |> Rat.eq
-  val term_size = 35
+  val term_size = 25
   val population_size = 200
   val generations = 1000
   val bests = 10

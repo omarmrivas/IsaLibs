@@ -104,7 +104,7 @@ ML {*
              |> Rat.eq
   val term_size = 25
   val population_size = 200
-  val generations = 100
+  val generations = 1000
   val bests = 10
   val mut_prob = 0.05
   val scheme_dest = @{thm "scheme_dest_def"}
@@ -126,7 +126,7 @@ local_setup {*
                                   lthy fitness finish term_size population_size generations bests mut_prob)
         val (eqs1, alleq1) = GNU_Plot.gp_statistics_to_equals population_size sts1
         val _ = tracing ("gp_statistics_to_equals Constructive: (" ^ string_of_int eqs1 ^ ", " ^ string_of_int alleq1 ^ ")")
-        val _ = GNU_Plot.gp_statistics_to_error_plot ("AckermannConsts"^ string_of_int experiments) generations sts1
+        val _ = GNU_Plot.gp_statistics_to_error_plot ("AckermannConsts"^ string_of_int generations) generations sts1
 
         val sts2 =
       1 upto experiments
@@ -134,9 +134,9 @@ local_setup {*
                                   lthy fitness finish term_size population_size generations bests mut_prob)
         val (eqs2, alleq2) = GNU_Plot.gp_statistics_to_equals population_size sts2
         val _ = tracing ("gp_statistics_to_equals Destructive: (" ^ string_of_int eqs2 ^ ", " ^ string_of_int alleq2 ^ ")")
-        val _ = GNU_Plot.gp_statistics_to_error_plot ("AckermannDest"^ string_of_int experiments) generations sts2
+        val _ = GNU_Plot.gp_statistics_to_error_plot ("AckermannDest"^ string_of_int generations) generations sts2
 
-        val _ = GNU_Plot.gp_statistics_to_cumulative_prob_plot ("Ackermann"^ string_of_int experiments) generations sts1 sts2
+        val _ = GNU_Plot.gp_statistics_to_cumulative_prob_plot ("Ackermann"^ string_of_int generations) generations sts1 sts2
     in lthy end
 *}
 

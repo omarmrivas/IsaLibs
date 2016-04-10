@@ -142,7 +142,7 @@ ML {*
              |> Rat.eq
   val term_size = 25
   val population_size = 200
-  val generations = 100
+  val generations = 1000
   val bests = 10
   val mut_prob = 0.05
   val scheme_dest = @{thm "scheme_dest_def"}

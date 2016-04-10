@@ -139,6 +139,8 @@ ML {*
   val functions_dest = [@{term "f\<^sub>d"}, @{term "g\<^sub>d"}]
   val functions_const = [@{term "f\<^sub>c"}, @{term "g\<^sub>c"}]
   val experiments = 20
+  val recursive_calls = 1
+  val bad_fitness = Rat.rat_of_int 10
 *}
 
 text {* We finally call the GP algorithm. *}
@@ -147,21 +149,21 @@ local_setup {*
  fn lthy =>
     let val sts1 =
       1 upto experiments
-        |> map (fn _ => GP.evolve true false scheme_const functions_const lthy fitness finish
+        |> map (fn _ => GP.evolve true false scheme_const functions_const recursive_calls bad_fitness lthy fitness finish
                                   term_size population_size generations bests mut_prob)
         val (eqs1, alleq1) = GNU_Plot.gp_statistics_to_equals population_size sts1
         val _ = tracing ("gp_statistics_to_equals Constructive: (" ^ string_of_int eqs1 ^ ", " ^ string_of_int alleq1 ^ ")")
-        val _ = GNU_Plot.gp_statistics_to_error_plot "EvenOddConsts" generations sts1
+        val _ = GNU_Plot.gp_statistics_to_error_plot ("EvenOddConsts"^string_of_int generations) generations sts1
 
         val sts2 =
       1 upto experiments
-        |> map (fn _ => GP.evolve true false scheme_dest functions_dest lthy fitness finish
+        |> map (fn _ => GP.evolve true false scheme_dest functions_dest recursive_calls bad_fitness lthy fitness finish
                                   term_size population_size generations bests mut_prob)
         val (eqs2, alleq2) = GNU_Plot.gp_statistics_to_equals population_size sts2
         val _ = tracing ("gp_statistics_to_equals Destructive: (" ^ string_of_int eqs2 ^ ", " ^ string_of_int alleq2 ^ ")")
-        val _ = GNU_Plot.gp_statistics_to_error_plot "EvenOddDest" generations sts2
+        val _ = GNU_Plot.gp_statistics_to_error_plot ("EvenOddDest"^string_of_int generations) generations sts2
 
-        val _ = GNU_Plot.gp_statistics_to_cumulative_prob_plot "EvenOdd" generations sts1 sts2
+        val _ = GNU_Plot.gp_statistics_to_cumulative_prob_plot ("EvenOdd"^string_of_int generations) generations sts1 sts2
     in lthy end
 *}
 

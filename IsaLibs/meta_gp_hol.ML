@@ -269,8 +269,12 @@ fun initial_population (data : gp_data) =
 (*             val _ = tracing "Closures: "
              val _ = map (tracing o (Syntax.string_of_term ctxt)) closures*)
              val rat = if calls_ok closures trms
-                       then (#fitness data) ctxt closures
-                       else (#bad_fitness data)
+                       then let val time = Date.toString (Date.fromTimeLocal (Time.now ()))
+                                val _ = tracing (time ^ " (ok) " ^ Syntax.string_of_term ctxt i)
+                            in (#fitness data) ctxt closures end
+                       else let val time = Date.toString (Date.fromTimeLocal (Time.now ()))
+                                val _ = tracing (time ^ " (bad) " ^ Syntax.string_of_term ctxt i)
+                            in (#bad_fitness data) end
              val ind = mk_individual ctxt trms
                                      (mk_subst vars trms)
                                      i
@@ -574,8 +578,12 @@ fun next_generation (data : gp_data)
           | NONE   => let val closures = map (prep_closure trms) (#terminating_closures data)
 (*                          val rat = (#fitness data) ctxt closures*)
                           val rat = if calls_ok closures trms
-                                    then (#fitness data) ctxt closures
-                                    else (#bad_fitness data)
+                                    then let val time = Date.toString (Date.fromTimeLocal (Time.now ()))
+                                             val _ = tracing (time ^ " (ok) " ^ Syntax.string_of_term ctxt i')
+                                         in (#fitness data) ctxt closures end
+                                    else let val time = Date.toString (Date.fromTimeLocal (Time.now ()))
+                                             val _ = tracing (time ^ " (bad) " ^ Syntax.string_of_term ctxt i')
+                                         in (#bad_fitness data) end
                           val ind = mk_individual ctxt trms
                                                   (mk_subst vars trms)
                                                   i' rat

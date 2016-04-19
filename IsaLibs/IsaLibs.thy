@@ -23,11 +23,10 @@ ML_file "ground_completion.ML"
 ML_file "proof_tools.ML"
 ML_file "commands.ML"
 ML_file "oriented_rules.ML"
-(*ML_file "gp.ML"*)
-ML_file "gp_hol.ML"
 ML_file "meta_gp_hol.ML"
 ML_file "exhaust.ML"
 ML_file "gnuplot.ML"
+ML_file "mysql.ML"
 
 setup {*
 DB_Counter_Example.setup_use_quickcheck #>
@@ -79,6 +78,7 @@ declare[[eta_contract = false]]
 ML {*
   val p1 = Multithreading.max_threads_value ()
   val p2 = Thread.numProcessors ()
+  val _ = Future.ML_statistics := false
 *}
 
 end

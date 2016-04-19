@@ -144,6 +144,22 @@ local_setup {*
 text {* We finally call the GP algorithm. *}
 
 local_setup {*
+ fn lthy =>
+    let val experiment = GP.evolve true false scheme_const functions_const recursive_calls bad_fitness lthy fitness finish
+                                   term_size population_size generations bests mut_prob
+        val _ = MySQL.new_experiment "SumConsts" generations term_size population_size experiment
+    in lthy end
+*}
+
+local_setup {*
+ fn lthy =>
+    let val experiment = GP.evolve true false scheme_dest functions_dest recursive_calls bad_fitness lthy fitness finish
+                                   term_size population_size generations bests mut_prob
+        val _ = MySQL.new_experiment "SumDest" generations term_size population_size experiment
+    in lthy end
+*}
+
+(*local_setup {*
  fn lthy => 
     let val sts1 =
       1 upto experiments
@@ -163,6 +179,6 @@ local_setup {*
 
         val _ = GNU_Plot.gp_statistics_to_cumulative_prob_plot ("Sum"^ string_of_int generations) generations sts1 sts2
     in lthy end
-*}
+*}*)
 
 end

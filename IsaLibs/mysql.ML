@@ -9,6 +9,8 @@ Production of GNU Plot Files.
 signature MYSQL =
 sig
 
+val new_experiment :  string -> int -> int -> int -> GP.gp_result -> unit
+
 end
 
 structure DB_MYSQL
@@ -125,7 +127,7 @@ fun new_experiment thy_name generations termsize population (Solved (ind, statis
                           |> Term_Tab.make
       val experiment_id = insert_experiment ((the o (Term_Tab.lookup individuals) o #norm) ind) thy_name generations termsize population
       val _ = map (insert_statistics individuals experiment_id) statistics
-  in 0 end
+  in () end
   | new_experiment thy_name generations termsize population (Unsolved (statistics)) =
   let val individuals = map #best_individual statistics
                           |> distinct (fn (ind1, ind2) => Term.aconv (#norm ind1, #norm ind2))
@@ -133,7 +135,7 @@ fun new_experiment thy_name generations termsize population (Solved (ind, statis
                           |> Term_Tab.make
       val experiment_id = insert_experiment ~1 thy_name generations termsize population
       val _ = map (insert_statistics individuals experiment_id) statistics
-  in 0 end
+  in () end
 end
 
 structure MySQL : MYSQL = DB_MYSQL

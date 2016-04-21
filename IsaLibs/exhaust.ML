@@ -38,7 +38,7 @@ fun calculate_search_space scheme term_size =
   let val ctxt = scheme |> Thm.theory_of_thm
                         |> Context.Theory
                         |> Context.proof_of
-      val term_count = GP.term_count ctxt scheme term_size
+      val term_count = GP.term_count tracing ctxt scheme term_size
       fun states f =
         case f () of
           SOME v => v :: states f
@@ -64,7 +64,7 @@ fun exhaust debug ctxt scheme term_size simps test =
                    |> Thm.full_prop_of
                    |> (fn t => Term.add_vars t [])
       val typs = map snd vars
-      val term_count = GP.term_count ctxt scheme term_size
+      val term_count = GP.term_count tracing ctxt scheme term_size
       val timeout =  GP.max_time_in_fitness |> Config.get ctxt
                                             |> Time.fromSeconds
       fun prep trms = trms |> mk_subst vars

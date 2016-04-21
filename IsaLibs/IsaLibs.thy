@@ -57,7 +57,7 @@ declare [[
   simp_before = false,
   max_time_in_counter_ex = 25,
   max_time_in_proof = 20,
-  max_time_in_fitness = 500,
+  max_time_in_fitness = 15,
   max_depth_in_meta_induction = 10,
   max_num_generalizations = 3,
   max_consts_in_generalizations = 4,
@@ -66,7 +66,8 @@ declare [[
   quickcheck_quiet = true,
   use_aprove=true,
   generate_cps=false,
-  max_time_in_termination = 20
+  max_time_in_termination = 20,
+  linarith_split_limit = 10
   ]]
 
 text {* Associative operators must be oriented this way to avoid non-termination

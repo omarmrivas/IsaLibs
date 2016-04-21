@@ -32,7 +32,8 @@ CREATE TABLE `experiments` (
   `theory` varchar(100) COLLATE utf8_bin NOT NULL,
   `generations` int(11) NOT NULL,
   `termsize` int(11) NOT NULL,
-  `population` int(11) NOT NULL
+  `population` int(11) NOT NULL,
+  `time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_bin;
 
 -- --------------------------------------------------------

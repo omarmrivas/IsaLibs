@@ -10,7 +10,10 @@ signature UTILS =
 sig
   (* Printing *)
   val str_of_thms        : thm list -> string
+  val str_of_terms       : Proof.context -> term list -> string
   val print_ss           : Proof.context -> unit
+  val trace_log          : Path.T -> string -> unit
+  val create_log          : Path.T -> unit
 
   (* Discrete mathematics *)
   val subsets            : 'a list -> 'a list list
@@ -18,7 +21,8 @@ sig
   val classify_poset     : ('a * 'a -> bool) -> 'a list -> 'a list list
   
   (* Terms *)
-  val term_to_string     : Proof.context -> term -> string
+  val string_of_term     : Proof.context -> term -> string
+  val string_of_typ      : Proof.context -> typ -> string
   val int_of_string      : string -> int
   val unique_names       : term -> term
   val dummyfy_term       : term -> term
@@ -316,10 +320,23 @@ fun substitute (t', 0 :: pos) (Abs (v, T, t)) =
   | substitute (t', []) _ = t'
   | substitute (_, pos) t = raise BadPosition (t, pos)
 
-fun term_to_string ctxt t =
+fun string_of_term ctxt t =
     let
       val ctxt' = Config.put show_markup false ctxt;
     in Print_Mode.setmp [] (Syntax.string_of_term ctxt') t end
+
+fun string_of_typ ctxt ty =
+    let
+      val ctxt' = Config.put show_markup false ctxt;
+    in Print_Mode.setmp [] (Syntax.string_of_typ ctxt') ty end
+
+val log_var = Synchronized.var "log_var" (() : unit)
+
+fun trace_log file str =
+  Synchronized.change log_var (fn () => File.append file (str ^ "\n"))
+
+fun create_log file =
+  Synchronized.change log_var (fn () => File.write file "")
 
 fun unique_names t =
   let fun unique names (Abs (v, T, t)) =
@@ -857,7 +874,7 @@ fun numeral_of_nat ctxt i =
 
   fun int_of_numeral t =
   let
-    val s = term_to_string @{context} t
+    val s = string_of_term @{context} t
     val ss = space_explode " " s
   in case ss of
       [s] => fst (s |> (map Char.toString) o String.explode
@@ -988,6 +1005,10 @@ fun str_of_thms thms =
   let fun str_of_cterm thy t = Syntax.string_of_term_global thy (Thm.term_of t)
       fun str_of_thm thy thm = str_of_cterm thy (#prop (Thm.crep_thm thm))
   in commas (map (fn th => str_of_thm (Thm.theory_of_thm th) th) thms) end
+
+fun str_of_terms ctxt terms =
+  terms |> map (string_of_term ctxt)
+        |> commas
 
 local 
   fun pretty_cterm ctxt ctrm =

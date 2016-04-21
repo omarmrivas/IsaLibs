@@ -133,13 +133,13 @@ ML {*
   val bad_fitness = Rat.rat_of_int 10
 *}
 
-local_setup {*
+(*local_setup {*
   fn ctxt =>
     let val functions = [@{term "f\<^sub>d ((\<lambda>a b c d e f g h i. b (c d a) f (e (g a) (i (h a)))))"}]
         val r = fitness ctxt functions
         val _ = tracing (Rat.string_of_rat r)
     in ctxt end
-*}
+*}*)
 
 text {* We finally call the GP algorithm. *}
 

@@ -22,10 +22,10 @@ open GP
 
 fun gp_statistics_to_error_plot file generations (sts : gp_result list) =
   let fun div_by_10 x = x / 10.0
-      fun extract (Solved (ind, [])) = (div_by_10 o Utils.rat_to_float o #fit) ind
-        | extract (Solved (_, (st :: _))) = (div_by_10 o Utils.rat_to_float o #fit o #best_individual) st
+      fun extract (Solved (ind, [])) = (div_by_10 o Utils.rat_to_float o the o #fit) ind
+        | extract (Solved (_, (st :: _))) = (div_by_10 o Utils.rat_to_float o the o #fit o #best_individual) st
         | extract (Unsolved []) = raise ERROR "Can not get statistics"
-        | extract (Unsolved (st :: _)) = (div_by_10 o Utils.rat_to_float o #fit o #best_individual) st
+        | extract (Unsolved (st :: _)) = (div_by_10 o Utils.rat_to_float o the o #fit o #best_individual) st
       fun reduce (Solved (ind, [])) = Solved (ind, [])
         | reduce (Solved (ind, _ :: sts)) = Solved (ind, sts)
         | reduce (Unsolved []) = raise ERROR "Can not reduce"
@@ -61,10 +61,10 @@ fun gp_statistics_to_error_plot file generations (sts : gp_result list) =
   end
 
 fun gp_statistics_to_cumulative_prob generations (sts : gp_result list) =
-  let fun extract (Solved (ind, [])) = #fit ind
-        | extract (Solved (_, st :: _)) = (#fit o #best_individual) st
+  let fun extract (Solved (ind, [])) = (the o #fit) ind
+        | extract (Solved (_, st :: _)) = (the o #fit o #best_individual) st
         | extract (Unsolved []) = raise ERROR "Can not get statistics"
-        | extract (Unsolved (st :: _)) = (#fit o #best_individual) st
+        | extract (Unsolved (st :: _)) = (the o #fit o #best_individual) st
       fun reduce (Solved (ind, [])) = Solved (ind, [])
         | reduce (Solved (ind, _ :: sts)) = Solved (ind, sts)
         | reduce (Unsolved []) = raise ERROR "Can not reduce"

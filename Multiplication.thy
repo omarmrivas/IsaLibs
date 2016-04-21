@@ -116,26 +116,29 @@ text {* We then define the fitness function, the termination criterion,
 
 ML {*
   fun fitness ctxt functions =
-    let val in_out = [(@{term "5::nat"}, @{term "3::nat"} ,@{term "15::int"}),
-                      (@{term "1::nat"}, @{term "1::nat"} ,@{term "1::int"}),
-                      (@{term "2::nat"}, @{term "2::nat"} ,@{term "4::int"}),
-                      (@{term "2::nat"}, @{term "3::nat"} ,@{term "6::int"}),
-                      (@{term "3::nat"}, @{term "2::nat"} ,@{term "6::int"}),
-                      (@{term "3::nat"}, @{term "3::nat"} ,@{term "9::int"}),
-                      (@{term "2::nat"}, @{term "4::nat"} ,@{term "8::int"}),
-                      (@{term "4::nat"}, @{term "2::nat"} ,@{term "8::int"}),
-                      (@{term "3::nat"}, @{term "4::nat"} ,@{term "12::int"}),
-                      (@{term "4::nat"}, @{term "4::nat"} ,@{term "16::int"})]
+    let val in_out = [(@{term "5::nat"}, @{term "3::nat"} ,15),
+                      (@{term "1::nat"}, @{term "1::nat"} ,1),
+                      (@{term "2::nat"}, @{term "2::nat"} ,4),
+                      (@{term "2::nat"}, @{term "3::nat"} ,6),
+                      (@{term "3::nat"}, @{term "2::nat"} ,6),
+                      (@{term "3::nat"}, @{term "3::nat"} ,9),
+                      (@{term "2::nat"}, @{term "4::nat"} ,8),
+                      (@{term "4::nat"}, @{term "2::nat"} ,8),
+                      (@{term "3::nat"}, @{term "4::nat"} ,12),
+                      (@{term "4::nat"}, @{term "4::nat"} ,16)]
         val c = @{term "20::nat"}
         val v = @{term "0 :: nat"}
         val f = (hd o tl) functions
         val to_int = @{term "(numeral o num_of_nat) :: nat\<Rightarrow>int"}
         val error = 
           in_out |> map (fn (x,y,r) => (Value.value ctxt (to_int $ (f $ c $ c $ v $ v $ x $ y)), r))
-                 |> map (fn (i, r) => if i = r then 0 else 1)
+                 |> map (fn (i, r) => let val err = Utils.int_of_numeral i - r
+                                      in err * err end)
     in (0, error) |> Library.foldl (op +)
                   |> Rat.rat_of_int end
-  fun finish ({fit, ...} : GP.individual) = Rat.eq (Rat.zero, fit)
+  fun finish ({fit, ...} : GP.individual) = case fit of
+                                              SOME fit => Rat.eq (Rat.zero, fit)
+                                            | NONE => false
   fun test ctxt consts =
       consts |> fitness ctxt
              |> pair Rat.zero
@@ -151,30 +154,24 @@ ML {*
   val functions_const = [@{term "f\<^sub>c"}, @{term "g\<^sub>c"}]
   val experiments = 20
   val recursive_calls = 1
-  val bad_fitness = Rat.rat_of_int 10
+  val bad_fitness = Rat.rat_of_int 1000
 *}
 
 text {* We finally call the GP algorithm. *}
 
 local_setup {*
  fn lthy =>
-    let val sts1 =
-      1 upto experiments
-        |> map (fn _ => GP.evolve true false scheme_const functions_const recursive_calls bad_fitness 
-                                  lthy fitness finish term_size population_size generations bests mut_prob)
-        val (eqs1, alleq1) = GNU_Plot.gp_statistics_to_equals population_size sts1
-        val _ = tracing ("gp_statistics_to_equals Constructive: (" ^ string_of_int eqs1 ^ ", " ^ string_of_int alleq1 ^ ")")
-        val _ = GNU_Plot.gp_statistics_to_error_plot ("MultiplicationConsts" ^ string_of_int generations) generations sts1
+    let val experiment = GP.evolve true false "MultiplicationConsts.log" scheme_const functions_const recursive_calls bad_fitness lthy fitness finish
+                                   term_size population_size generations bests mut_prob
+        val _ = MySQL.new_experiment "MultiplicationConsts" generations term_size population_size experiment
+    in lthy end
+*}
 
-        val sts2 =
-      1 upto experiments
-        |> map (fn _ => GP.evolve true false scheme_dest functions_dest recursive_calls bad_fitness
-                                  lthy fitness finish term_size population_size generations bests mut_prob)
-        val (eqs2, alleq2) = GNU_Plot.gp_statistics_to_equals population_size sts2
-        val _ = tracing ("gp_statistics_to_equals Destructive: (" ^ string_of_int eqs2 ^ ", " ^ string_of_int alleq2 ^ ")")
-        val _ = GNU_Plot.gp_statistics_to_error_plot ("MultiplicationDest"^ string_of_int generations) generations sts2
-
-        val _ = GNU_Plot.gp_statistics_to_cumulative_prob_plot ("Multiplication" ^ string_of_int generations) generations sts1 sts2
+local_setup {*
+ fn lthy =>
+    let val experiment = GP.evolve true false "MultiplicationDest.log" scheme_dest functions_dest recursive_calls bad_fitness lthy fitness finish
+                                   term_size population_size generations bests mut_prob
+        val _ = MySQL.new_experiment "MultiplicationDest" generations term_size population_size experiment
     in lthy end
 *}
 

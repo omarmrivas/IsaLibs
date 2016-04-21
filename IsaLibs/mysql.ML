@@ -83,7 +83,7 @@ fun search_individual ctxt (individual : individual) : (int * individual) option
                                    genome = evaluate genome_ref "genome_ref" genome,
                                    subst = evaluate subst_ref "subst_ref" subst,
                                    norm = evaluate norm_ref "norm_ref" norm,
-                                   fit = Rat.rat_of_quotient (evaluate fit_ref "fit_ref" fit)})
+                                   fit = SOME (Rat.rat_of_quotient (evaluate fit_ref "fit_ref" fit))})
                               | _ => raise ERROR "Error")
                  |> SOME
           end
@@ -95,7 +95,7 @@ fun insert_individual (individual : individual) =
       val terms = ML_Syntax.print_list (ML_Syntax.print_pair ML_Syntax.print_term ML_Syntax.print_term)
       val subst_str = escape_string (ML_Syntax.print_pair typs terms (#subst individual))
       val norm_str = escape_string (ML_Syntax.print_term (#norm individual))
-      val fit_str = escape_string ((string_of_real o Utils.rat_to_float) (#fit individual))
+      val fit_str = escape_string ((string_of_real o Utils.rat_to_float) ((the o #fit) individual))
       val insert_individual = "INSERT INTO `individuals`(`genome`, `subst`, `norm`, `fit`) VALUES (\"" ^genome_str^ "\",\"" ^ subst_str ^"\",\"" ^ norm_str ^ "\","^fit_str^")"
       val _ = Isabelle_System.bash_output ("mysql -u isalibs --password='isalibs' -h 'localhost' -e '" ^ insert_individual ^ "' isalibs")
   in (#norm individual, get_max_id "individuals")  end
@@ -112,7 +112,9 @@ fun insert_statistics m experiment (statistic : gp_statistic) =
   in () end
 
 fun insert_experiment solution thy_name generations termsize population =
-  let val solution_str = string_of_int solution
+  let val solution_str = case solution of
+                          SOME solution => string_of_int solution
+                        | NONE => "-1"
       val generations_str = string_of_int generations
       val termsize_str = string_of_int termsize
       val population_str = string_of_int population
@@ -125,7 +127,7 @@ fun new_experiment thy_name generations termsize population (Solved (ind, statis
                           |> distinct (fn (ind1, ind2) => Term.aconv (#norm ind1, #norm ind2))
                           |> map insert_individual
                           |> Term_Tab.make
-      val experiment_id = insert_experiment ((the o (Term_Tab.lookup individuals) o #norm) ind) thy_name generations termsize population
+      val experiment_id = insert_experiment (SOME ((the o (Term_Tab.lookup individuals) o #norm) ind)) thy_name generations termsize population
       val _ = map (insert_statistics individuals experiment_id) statistics
   in () end
   | new_experiment thy_name generations termsize population (Unsolved (statistics)) =
@@ -133,7 +135,7 @@ fun new_experiment thy_name generations termsize population (Solved (ind, statis
                           |> distinct (fn (ind1, ind2) => Term.aconv (#norm ind1, #norm ind2))
                           |> map insert_individual
                           |> Term_Tab.make
-      val experiment_id = insert_experiment ~1 thy_name generations termsize population
+      val experiment_id = insert_experiment NONE thy_name generations termsize population
       val _ = map (insert_statistics individuals experiment_id) statistics
   in () end
 end

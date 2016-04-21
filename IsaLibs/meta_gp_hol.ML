@@ -15,7 +15,7 @@ sig
                      genome: term list,
                      subst : subst,
                      norm  : term,
-                     fit   : Rat.rat}
+                     fit   : Rat.rat option}
 
   type gp_statistic = {
       best_individual : individual,
@@ -30,11 +30,11 @@ sig
 
   val timeout_error : Proof.context -> term -> unit
 
-  val term_count   : Proof.context -> thm -> int -> (int * int) list list
+  val term_count   : (string -> unit) -> Proof.context -> thm -> int -> (int * int) list list
   val well_defined : local_theory -> term -> Proof.context option
   val fnames_of    : Proof.context -> (string * typ) list
 
-  val evolve : bool -> bool -> thm -> term list -> int -> Rat.rat ->
+  val evolve : bool -> bool -> string -> thm -> term list -> int -> Rat.rat ->
     Proof.context ->
     (Proof.context -> term list -> Rat.rat) ->
     (individual -> bool) ->
@@ -48,14 +48,12 @@ structure DB_GP
 
 val (max_time_in_fitness, setup_max_time_in_fitness) = Attrib.config_int @{binding "max_time_in_fitness"} (K 30)
 
-val big_rational = Rat.rat_of_int 1000000
-
 type subst = (typ * typ) list * (term * term) list
 type individual = {ctxt  : Proof.context,
                    genome: term list,
                    subst : subst,
                    norm  : term,
-                   fit   : Rat.rat}
+                   fit   : Rat.rat option}
 
 type gp_data = { scheme : thm,
                  terminating_closures : thm list,
@@ -73,6 +71,7 @@ type gp_data = { scheme : thm,
                  debug : bool,
                  parallel : bool,
                  timeout : Time.time,
+                 logfile : Path.T,
                  ctxt : Proof.context}
 
 type gp_statistic = {
@@ -105,24 +104,26 @@ fun mk_statistic best_individual average_size average_error equals : gp_statisti
     equals = equals}
 
 fun calculate_statistic data equals pool =
-  let fun size_of_terms trms = Library.foldl (fn (s, t) => s + size_of_term t) (0, trms)
+  let val tracing = Utils.trace_log (#logfile data)
+      fun size_of_terms trms = Library.foldl (fn (s, t) => s + size_of_term t) (0, trms)
       val av_size =
             pool |> map (size_of_terms o #genome)
                  |> pair 0
                  |> Library.foldl (op +)
                  |> (fn x => real x / real (#population_size data))
       val av_error =
-            pool |> map #fit
+            pool |> map (the o #fit)
                  |> pair Rat.zero
                  |> Library.foldl (op +/)
                  |> (fn x => x // Rat.rat_of_int (#population_size data))
       val bst_individual =
-            pool |> Metis_Useful.minimum (Rat.ord o apply2 #fit)
+            pool |> Metis_Useful.minimum (Rat.ord o apply2 (the o #fit))
                  |> fst
       val _ = tracing ("Average size: " ^ string_of_real av_size)
       val _ = tracing ("Average error: " ^ Rat.string_of_rat av_error ^ " (" ^ (string_of_real o Utils.rat_to_float) av_error ^ ")")
-      val _ = tracing ("Best error: " ^ Rat.string_of_rat (#fit bst_individual))
-      val _ = tracing ("Normal Form: " ^ Syntax.string_of_term (#ctxt data) (#norm bst_individual))
+      val _ = tracing ("Best error: " ^ Rat.string_of_rat ((the o #fit) bst_individual))
+      val _ = tracing ("Normal Form: " ^ Utils.string_of_term (#ctxt data) (#norm bst_individual))
+      val _ = tracing ("Genome: " ^ Utils.str_of_terms (#ctxt data) (#genome bst_individual))
     in mk_statistic bst_individual av_size (Utils.rat_to_float av_error) equals end
 
 (* FIXME: No type mapping *)
@@ -169,12 +170,15 @@ fun recursive_calls_ok (data : gp_data) fs ((typs, terms) : subst) =
   in fs |> map (fn simp => (get_f simp, simps))
 (*        |> tap (map (fn (f, simps) => tracing (Syntax.string_of_term (#ctxt data) f ^ ":" ^  Utils.str_of_thms simps)))*)
         |> forall (fn (f, simps) =>
-                      forall (fn simp => count_rcalls data f simp (typs, terms) 
+                      forall (fn simp => count_rcalls data f simp (typs, terms)
                                           <= (#recursive_calls data)) simps)
   end
-(*  (#closures data) ~~ (#simps_of_closures data)
-    |> forall (fn (fs, simps) =>
-                forall (fn simp => count_rcalls data f simp (typs, terms) <= (#recursive_calls data)) simps)*)
+
+fun individual_ok (data : gp_data) (individual : individual) =
+  (#norm individual)
+    |> Utils.binder_elimination Const_Names.hol_exists []
+    |> snd
+    |> (fn l => length l = length (#terminating_closures data))
 
 val fun_config =
   Function_Common.FunctionConfig { sequential=true, default= NONE (*FIXME dynamic scoping*),
@@ -245,8 +249,17 @@ fun well_defined lthy t =
     handle TERM _ => NONE
          | ERROR _ => NONE
 
+fun worst_fitness (data : gp_data) population =
+  population |> filter (is_some o #fit)
+             |> (fn l => if null l
+                         then #bad_fitness data
+                         else l |> Metis_Useful.maximum (Rat.ord o apply2 (the o #fit))
+                                |> fst
+                                |> (the o #fit))
+
 fun initial_population (data : gp_data) =
-   let val parallel = #parallel data
+   let val tracing = Utils.trace_log (#logfile data)
+       val parallel = #parallel data
        val vars = (#scheme data)
                          |> Thm.full_prop_of
                          |> (fn t => Term.add_vars t [])
@@ -271,10 +284,12 @@ fun initial_population (data : gp_data) =
              val rat = if calls_ok closures trms
                        then let (*val time = Date.toString (Date.fromTimeLocal (Time.now ()))
                                 val _ = tracing (time ^ " (ok) " ^ Syntax.string_of_term ctxt i)*)
-                            in (#fitness data) ctxt closures end
+                            in (SOME (TimeLimit.timeLimit (#timeout data) ((#fitness data) ctxt) closures)
+                                  handle TimeLimit.TimeOut => (tracing ("Timeout in: " ^ Utils.str_of_terms ctxt trms);
+                                                               NONE)) end
                        else let (*val time = Date.toString (Date.fromTimeLocal (Time.now ()))
                                 val _ = tracing (time ^ " (bad) " ^ Syntax.string_of_term ctxt i)*)
-                            in (#bad_fitness data) end
+                            in NONE end
              val ind = mk_individual ctxt trms
                                      (mk_subst vars trms)
                                      i
@@ -307,9 +322,17 @@ fun initial_population (data : gp_data) =
                                    i
                                    (#fit ind)
                   end)
+      val worst = worst_fitness data population
    in
       population
-        |> sort ((prod_ord Rat.ord Term_Ord.term_ord) o apply2 (fn ind => (#fit ind, #norm ind)))
+        |> map (fn ind => case #fit ind of
+                            SOME _ => ind
+                          | NONE => mk_individual (#ctxt data)
+                                                  (#genome ind)
+                                                  (#subst ind)
+                                                  (#norm ind)
+                                                  (SOME worst))
+        |> sort ((prod_ord (option_ord Rat.ord) Term_Ord.term_ord) o apply2 (fn ind => (#fit ind, #norm ind)))
         |> pair global
         |> (fn (global, pool) => (calculate_statistic data equal_ind pool, (global, pool)))
    end
@@ -515,7 +538,7 @@ fun Mutation (data : gp_data) ss =
 
 fun print_pool (pool : individual list) =
   pool |> map (fn ind => 
-          tracing (Syntax.string_of_term (#ctxt ind) (#norm ind) ^ " : " ^ (string_of_real o Utils.rat_to_float) (#fit ind)))
+          tracing (Syntax.string_of_term (#ctxt ind) (#norm ind) ^ " : " ^ (string_of_real o Utils.rat_to_float) ((the o #fit) ind)))
 
 fun print_pool' ctxt (pool : (individual * int) list) =
   pool |> map (fn (ind, i) => 
@@ -526,6 +549,7 @@ fun print_pool' ctxt (pool : (individual * int) list) =
 fun next_generation (data : gp_data)
                     (global : individual Term_Tab.table, pool : individual list) =
   let (*val _ = print_pool pool*)
+      val tracing = Utils.trace_log (#logfile data)
       val vars = (#scheme data)
                          |> Thm.full_prop_of
                          |> (fn t => Term.add_vars t [])
@@ -535,21 +559,24 @@ fun next_generation (data : gp_data)
                                        |> prepare_closure data thm
       fun calls_ok fs trms = trms |> mk_subst vars
                                   |> recursive_calls_ok data fs
-      val pool' = map (fn {ctxt, genome,
+      val pool' = pool |> filter (individual_ok data)
+                       |> map (fn {ctxt, genome,
                            subst, norm,
-                           fit} => fit |> Rat.inv
-                                       |> mk_individual ctxt genome subst norm) pool
+                           fit} => fit |> (Rat.inv o the)
+                                       |> SOME
+                                       |> mk_individual ctxt genome subst norm)
       val lcm = Library.foldl (fn (lcm, ind) =>
-              ind |> #fit
+              ind |> (the o #fit)
                   |> (snd o Rat.quotient_of_rat)
                   |> Integer.lcm lcm) (1, pool')
                   |> rpair 1
                   |> Rat.rat_of_quotient
       val pool' = pool' |> map (fn {ctxt, genome,
                                     subst, norm,
-                                    fit} => lcm */ fit
+                                    fit} => lcm */ (the fit)
+                                              |> SOME
                                               |> mk_individual ctxt genome subst norm)
-                        |> map (fn ind => (ind, (fst o Rat.quotient_of_rat) (#fit ind)))
+                        |> map (fn ind => (ind, (fst o Rat.quotient_of_rat o the) (#fit ind)))
       val minv = pool' |> Utils.minby int_ord snd
                        |> snd
       val  pool' = map (fn (t, i) => (t, i div minv)) pool'
@@ -580,10 +607,14 @@ fun next_generation (data : gp_data)
                           val rat = if calls_ok closures trms
                                     then let (*val time = Date.toString (Date.fromTimeLocal (Time.now ()))
                                              val _ = tracing (time ^ " (ok) " ^ Syntax.string_of_term ctxt i')*)
-                                         in (#fitness data) ctxt closures end
+                                         in (TimeLimit.timeLimit (#timeout data) ((#fitness data) ctxt) closures
+                                           handle TimeLimit.TimeOut => (tracing ("Timeout in: " ^ Utils.str_of_terms ctxt trms);
+                                                                        (#bad_fitness data)))
+                                              |> SOME end
+(*                                         in (#fitness data) ctxt closures end*)
                                     else let (*val time = Date.toString (Date.fromTimeLocal (Time.now ()))
                                              val _ = tracing (time ^ " (bad) " ^ Syntax.string_of_term ctxt i')*)
-                                         in (#bad_fitness data) end
+                                         in NONE end
                           val ind = mk_individual ctxt trms
                                                   (mk_subst vars trms)
                                                   i' rat
@@ -628,12 +659,21 @@ fun next_generation (data : gp_data)
                                    (mk_subst vars trms)
                                    i (#fit ind) end)
       val bests = take (#bests data) pool
-  in bests @ rest_ind
-      |> sort ((prod_ord Rat.ord Term_Ord.term_ord) o apply2 (fn ind => (#fit ind, #norm ind)))
-      |> pair global
-      |> (fn (global, pool) => (calculate_statistic data equal_ind pool, (global, pool))) end
+      val population = bests @ rest_ind
+      val worst = worst_fitness data population
+   in population
+        |> map (fn ind => case #fit ind of
+                            SOME _ => ind
+                          | NONE => mk_individual (#ctxt data)
+                                                  (#genome ind)
+                                                  (#subst ind)
+                                                  (#norm ind)
+                                                  (SOME worst))
+        |> sort ((prod_ord (option_ord Rat.ord) Term_Ord.term_ord) o apply2 (fn ind => (#fit ind, #norm ind)))
+        |> pair global
+        |> (fn (global, pool) => (calculate_statistic data equal_ind pool, (global, pool))) end
 
-fun term_count ctxt scheme term_size =
+fun term_count tracing ctxt scheme term_size =
   let val vars = scheme
                    |> Thm.full_prop_of
                    |> (fn t => Term.add_vars t [])
@@ -641,15 +681,18 @@ fun term_count ctxt scheme term_size =
        map (fn (_, typ) => 
          1 upto term_size
            |> tap (fn _ => tracing ("Precalculating the inhabitants of type: " ^
-                                    Syntax.string_of_typ ctxt typ))
+                                    Utils.string_of_typ ctxt typ))
            |> Par_List.map (fn i => (i, Random_Terms.count_terms typ i))
            |> filter (fn (_, c) => c > 0)
            |> tap (map (fn (i, c) => tracing (string_of_int i ^ " : " ^ string_of_int c))))
   end
 
-fun evolve parallel dbg scheme terminating_closures recursive_calls bad_fitness ctxt fitness finish term_size population_size generations bests mut_prob =
- (let val _ = tracing "Building initial population..."
-      val term_count = term_count ctxt scheme term_size
+fun evolve parallel dbg log scheme terminating_closures recursive_calls bad_fitness ctxt fitness finish term_size population_size generations bests mut_prob =
+ (let val path = Path.explode log
+      val tracing = Utils.trace_log path
+      val _ = Utils.create_log path
+      val _ = tracing "Building initial population..."
+      val term_count = term_count tracing ctxt scheme term_size
       val thy = Proof_Context.theory_of ctxt
       val simps_of_closures = map (fn Const (n, _) => Utils.get_rewrites thy n
                                   | _ => raise ERROR "Not ") terminating_closures
@@ -669,6 +712,7 @@ fun evolve parallel dbg scheme terminating_closures recursive_calls bad_fitness 
                  ctxt = ctxt,
                  debug = dbg,
                  parallel = parallel,
+                 logfile = path,
                  timeout = max_time_in_fitness |> Config.get ctxt
                                                |> Time.fromSeconds,
                  simps = scheme |> Thm.full_prop_of
@@ -681,13 +725,13 @@ fun evolve parallel dbg scheme terminating_closures recursive_calls bad_fitness 
         in if i <= generations
            then (let val (statistic, next) = next_generation data global_pool
                  in loop (i+1) (statistic :: statistics) next end)
-                 handle DONE ind => let val _ = tracing ("Solution: " ^ Syntax.string_of_term (#ctxt ind) (#norm ind))
+                 handle DONE ind => let val _ = tracing ("Solution: " ^ Utils.string_of_term (#ctxt ind) (#norm ind))
                                     in Solved (ind, rev statistics) end
            else Unsolved (rev statistics)
         end
   in data |> initial_population
           |> (fn (statistic, global_pool) => loop 1 [statistic] global_pool) end)
-  handle DONE ind => let val _ = tracing ("Solution: " ^ Syntax.string_of_term (#ctxt ind) (#norm ind))
+  handle DONE ind => let val _ = tracing ("Solution: " ^ Utils.string_of_term (#ctxt ind) (#norm ind))
                      in Solved (ind, []) end
 
 end

@@ -19,5 +19,4 @@ echo "theories [document = false]" >> $ROOTFILE
 echo "\"../../$LOGIC\"" >> $ROOTFILE
 
 # cp $FILE $LOGIC
-
-isabelle build -b -v -D experiments/$LOGIC
+isabelle build -c -v -D experiments/$LOGIC

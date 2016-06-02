@@ -34,11 +34,11 @@ sig
   val well_defined : local_theory -> term -> Proof.context option
   val fnames_of    : Proof.context -> (string * typ) list
 
-  val evolve : bool -> bool -> string -> thm -> term list -> int -> Rat.rat ->
+  val evolve : bool -> bool -> bool -> string -> thm -> term list -> int -> Rat.rat ->
     Proof.context ->
     (Proof.context -> term list -> Rat.rat) ->
     (individual -> bool) ->
-    int -> int -> int -> int -> real -> gp_result
+    int -> int -> int -> int -> int -> real -> gp_result
 
 end
 
@@ -59,6 +59,7 @@ type gp_data = { scheme : thm,
                  terminating_closures : thm list,
                  simps_of_closures : thm list list,
                  term_size : int,
+                 max_term_size : int,
                  recursive_calls : int,
                  population_size : int,
                  bests : int,
@@ -70,6 +71,7 @@ type gp_data = { scheme : thm,
                  simps : thm list,
                  debug : bool,
                  parallel : bool,
+                 empty_simpset : bool,
                  timeout : Time.time,
                  logfile : Path.T,
                  ctxt : Proof.context}
@@ -136,7 +138,9 @@ fun prepare (data : gp_data) ((typs, terms) : subst) =
    map (apply2 (Thm.cterm_of (#ctxt data))) terms)
     |> (fn csubst => Drule.instantiate_normalize csubst (#scheme data))
 (*    |> tap (tracing o Utils.str_of_thms o single)*)
-    |> Proof_Tools.normalise_thm (#ctxt data) (#simps data)
+    |> (fn thm => if (#empty_simpset data)
+                  then Proof_Tools.normalise_thm_empty_simpset (#ctxt data) (#simps data) thm
+                  else Proof_Tools.normalise_thm (#ctxt data) (#simps data) thm)
 (*    |> tap (tracing o Utils.str_of_thms o single)*)
     |> snd o Logic.dest_equals o Thm.full_prop_of
 
@@ -286,7 +290,10 @@ fun initial_population (data : gp_data) =
                                 val _ = tracing (time ^ " (ok) " ^ Syntax.string_of_term ctxt i)*)
                             in (SOME (TimeLimit.timeLimit (#timeout data) ((#fitness data) ctxt) closures)
                                   handle TimeLimit.TimeOut => (tracing ("Timeout in: " ^ Utils.str_of_terms ctxt trms);
-                                                               NONE)) end
+                                                               NONE)
+                                        | unknown => (tracing ("Unknown error(genome): " ^ Utils.str_of_terms ctxt trms);
+                                                      tracing ("Unknown error(norm): " ^ Utils.string_of_term ctxt i);
+                                                      raise unknown)) end
                        else let (*val time = Date.toString (Date.fromTimeLocal (Time.now ()))
                                 val _ = tracing (time ^ " (bad) " ^ Syntax.string_of_term ctxt i)*)
                             in NONE end
@@ -420,8 +427,15 @@ fun Crossover (data : gp_data) ss tt =
                       |> Utils.weighted_choose
        val prefix = take i ss
        val suffix = drop (i + 1) ss
-       val c = crossover s t
-       val nn = prefix @ [c] @ suffix
+       fun retry i =
+          if i > 50
+          then s
+          else let val c = crossover s t
+               in if size_of_term c > #max_term_size data
+                  then retry (i + 1)
+                  else c
+               end
+       val nn = prefix @ [retry 0] @ suffix
   in nn
   end
 
@@ -530,8 +544,16 @@ fun Mutation (data : gp_data) ss =
                       |> Utils.weighted_choose
        val prefix = take i ss
        val suffix = drop (i + 1) ss
-       val c = mutation data s
-       val nn = prefix @ [c] @ suffix
+(*       val c = mutation data s*)
+       fun retry i =
+          if i > 50
+          then s
+          else let val c = mutation data s
+               in if size_of_term c > #max_term_size data
+                  then retry (i + 1)
+                  else c
+               end
+       val nn = prefix @ [retry 0] @ suffix
   in nn
   end
   else ss
@@ -609,7 +631,10 @@ fun next_generation (data : gp_data)
                                              val _ = tracing (time ^ " (ok) " ^ Syntax.string_of_term ctxt i')*)
                                          in (TimeLimit.timeLimit (#timeout data) ((#fitness data) ctxt) closures
                                            handle TimeLimit.TimeOut => (tracing ("Timeout in: " ^ Utils.str_of_terms ctxt trms);
-                                                                        (#bad_fitness data)))
+                                                                        (#bad_fitness data))
+                                                | unknown => (tracing ("Unknown error(genome): " ^ Utils.str_of_terms ctxt trms);
+                                                              tracing ("Unknown error(norm): " ^ Utils.string_of_term ctxt i');
+                                                              raise unknown))
                                               |> SOME end
 (*                                         in (#fitness data) ctxt closures end*)
                                     else let (*val time = Date.toString (Date.fromTimeLocal (Time.now ()))
@@ -687,7 +712,7 @@ fun term_count tracing ctxt scheme term_size =
            |> tap (map (fn (i, c) => tracing (string_of_int i ^ " : " ^ string_of_int c))))
   end
 
-fun evolve parallel dbg log scheme terminating_closures recursive_calls bad_fitness ctxt fitness finish term_size population_size generations bests mut_prob =
+fun evolve parallel dbg empty_simpset log scheme terminating_closures recursive_calls bad_fitness ctxt fitness finish term_size max_term_size population_size generations bests mut_prob =
  (let val path = Path.explode log
       val tracing = Utils.trace_log path
       val _ = Utils.create_log path
@@ -701,6 +726,7 @@ fun evolve parallel dbg log scheme terminating_closures recursive_calls bad_fitn
                  simps_of_closures = simps_of_closures,
                  terminating_closures = map hd simps_of_closures,
                  term_size = term_size,
+                 max_term_size = max_term_size,
                  recursive_calls = recursive_calls,
                  bad_fitness = bad_fitness,
                  population_size = population_size,
@@ -712,6 +738,7 @@ fun evolve parallel dbg log scheme terminating_closures recursive_calls bad_fitn
                  ctxt = ctxt,
                  debug = dbg,
                  parallel = parallel,
+                 empty_simpset = empty_simpset,
                  logfile = path,
                  timeout = max_time_in_fitness |> Config.get ctxt
                                                |> Time.fromSeconds,

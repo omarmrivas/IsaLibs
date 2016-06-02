@@ -8,8 +8,8 @@ Production of GNU Plot Files.
 
 signature GNU_PLOT =
 sig
-  val gp_statistics_to_error_plot           : string -> int -> GP.gp_result list -> unit
-  val gp_statistics_to_cumulative_prob_plot : string -> int -> GP.gp_result list -> 
+  val gp_statistics_to_error_plot           : string -> string -> int -> GP.gp_result list -> unit
+  val gp_statistics_to_cumulative_prob_plot : string -> string -> int -> GP.gp_result list -> 
                                               GP.gp_result list -> unit
   val gp_statistics_to_equals               : int -> GP.gp_result list -> int * int
 end
@@ -20,8 +20,39 @@ structure DB_GNU_Plot
 
 open GP
 
-fun gp_statistics_to_error_plot file generations (sts : gp_result list) =
-  let fun div_by_10 x = x / 10.0
+val string_of_real = (translate_string
+                        (fn "~" => "-"
+                        |x => x)) o string_of_real
+
+fun max_error (sts : gp_result list) =
+  let fun dest_result (Solved (_, sts)) = sts
+        | dest_result (Unsolved sts) = sts
+  in sts |> maps dest_result
+         |> (fn l => if null l
+                     then 1.0
+                     else l |> Metis_Useful.maximum (option_ord Rat.ord o (apply2 (#fit o #best_individual)))
+                            |> (fn r => if is_some ((#fit o #best_individual o fst) r)
+                                        then (Utils.rat_to_float o the o #fit o #best_individual o fst) r
+                                        else 1.0))
+  end
+
+fun max_generation (sts : gp_result list) =
+  let fun dest_result (Solved (_, sts)) = length sts
+        | dest_result (Unsolved sts) = length sts
+  in sts |> map dest_result
+         |> (fn l => if null l
+                     then 1
+                     else l |> Metis_Useful.maximum int_ord
+                            |> fst
+                            |> (fn n => if n = 0
+                                        then 1
+                                        else n))
+  end
+
+fun gp_statistics_to_error_plot file title generations (sts : gp_result list) =
+  let val merror = max_error sts
+      val mgeneration = max_generation sts
+      fun div_by_10 x = x / merror
       fun extract (Solved (ind, [])) = (div_by_10 o Utils.rat_to_float o the o #fit) ind
         | extract (Solved (_, (st :: _))) = (div_by_10 o Utils.rat_to_float o the o #fit o #best_individual) st
         | extract (Unsolved []) = raise ERROR "Can not get statistics"
@@ -35,10 +66,12 @@ fun gp_statistics_to_error_plot file generations (sts : gp_result list) =
       val experiments = length sts
       val _ =
         let val header =["set terminal epslatex color\n",
+(*        let val header =["set terminal postscript eps enhanced color font 'Helvetica,10'\n",*)
                          "set output \"" ^ file ^ "Error.tex\"\n",
+(*                         "set output \"" ^ file ^ "Error.eps\"\n",*)
                          "set format xy \"$%g$\"\n",
-                         "set title \"Error\"\n",
-                         "set xrange [0.0:100.0]\n",
+                         "set title \"" ^ title ^ "\"\n",
+                         "set xrange [0.0:" ^ string_of_int mgeneration ^ "]\n",
                          "set yrange [0.0:1.0]\n",
                          "set xlabel \"Generation\"\n",
                          "set ylabel \"Minimum error\"\n"]
@@ -84,17 +117,19 @@ fun gp_statistics_to_cumulative_prob generations (sts : gp_result list) =
        |> rev o fst
   end
 
-fun gp_statistics_to_cumulative_prob_plot file generations (sts1 : gp_result list) (sts2 : gp_result list) =
+fun gp_statistics_to_cumulative_prob_plot file title generations (sts1 : gp_result list) (sts2 : gp_result list) =
   let val datafile = file ^ "Cumulative.data"
       val plotfile = file ^ "Cumulative.plot"
       val cums1 = gp_statistics_to_cumulative_prob generations sts1
       val cums2 = gp_statistics_to_cumulative_prob generations sts2
       val _ =
         let val header =["set terminal epslatex color\n",
+(*        let val header =["set terminal postscript eps enhanced color font 'Helvetica,10'\n",*)
                          "set output \"" ^ file ^ "Cumulative.tex\"\n",
+(*                         "set output \"" ^ file ^ "Cumulative.eps\"\n",*)
                          "set format xy \"$%g$\"\n",
-                         "set title \"Cumulative Probability of Success (CPS)\"\n",
-                         "set xrange [0.0:100.0]\n",
+                         "set title \"" ^ title ^ "\"\n",
+                         "set xrange [0.0:" ^ string_of_int generations ^ "]\n",
                          "set yrange [0.0:1.0]\n",
                          "set xlabel \"Generation\"\n",
                          "set ylabel \"CPS\"\n"]

@@ -15,6 +15,7 @@ sig
   val use_metis                    : bool Config.T
 
   val normalise_thm        :  Proof.context -> thm list -> thm -> thm
+  val normalise_thm_empty_simpset : Proof.context -> thm list -> thm -> thm
   val normalise_conjecture :  Proof.context -> thm list -> term -> term
   val meta_induction : (term list -> term list -> Proof.context -> theory -> int -> thm list -> term option)
                        -> Proof.context -> int -> term -> (thm list * thm list) option
@@ -32,12 +33,51 @@ val (max_consts_in_generalizations, setup_max_consts_in_generalizations) = Attri
 val (max_lambda_size, setup_max_lambda_size) = Attrib.config_int @{binding "max_lambda_size"} (K 8)
 val (use_metis, setup_use_metis) = Attrib.config_bool @{binding "use_metis"} (K true)
 
+val path = Path.explode "proof_tools.log"
+
 fun normalise_thm ctxt simps thm =
   let val ctxt = ctxt |> Context.Proof
                       |> Simplifier.map_ss (fn simpset => simpset addsimps simps)
                       |> Context.the_proof
+      val limit = Prover.max_time_in_proof
+                    |> Config.get ctxt
+                    |> Time.fromSeconds
   in
-    simplify ctxt thm
+    TimeLimit.timeLimit limit
+    (simplify ctxt) thm
+    handle TimeLimit.TimeOut => (if File.exists path
+                                 then ()
+                                 else Utils.create_log path;
+                       Utils.trace_log path ("Timeout in :" ^ Utils.str_of_thms [thm]);
+                       raise TimeLimit.TimeOut)
+         | unknown => (if File.exists path
+                       then ()
+                       else Utils.create_log path;
+                       Utils.trace_log path ("Unknown: " ^ Utils.str_of_thms [thm]);
+                       raise unknown)
+  end
+
+fun normalise_thm_empty_simpset ctxt simps thm =
+  let val limit = Prover.max_time_in_proof
+                    |> Config.get ctxt
+                    |> Time.fromSeconds
+      val ctxt =  ctxt |> empty_simpset
+                       |> Context.Proof
+                       |> Simplifier.map_ss (fn simpset => simpset addsimps simps)
+                       |> Context.the_proof
+  in
+    TimeLimit.timeLimit limit
+    (simplify ctxt) thm
+    handle TimeLimit.TimeOut => (if File.exists path
+                                 then ()
+                                 else Utils.create_log path;
+                       Utils.trace_log path ("Timeout in :" ^ Utils.str_of_thms [thm]);
+                       raise TimeLimit.TimeOut)
+         | unknown => (if File.exists path
+                       then ()
+                       else Utils.create_log path;
+                       Utils.trace_log path ("Unknown: " ^ Utils.str_of_thms [thm]);
+                       raise unknown)
   end
 
 fun normalise_conjecture ctxt simps prop =

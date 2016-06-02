@@ -13,7 +13,9 @@ sig
   val str_of_terms       : Proof.context -> term list -> string
   val print_ss           : Proof.context -> unit
   val trace_log          : Path.T -> string -> unit
-  val create_log          : Path.T -> unit
+  val create_log         : Path.T -> unit
+  val html_table         : string list list -> string
+  val write_to_file      : string -> string -> unit
 
   (* Discrete mathematics *)
   val subsets            : 'a list -> 'a list list
@@ -63,6 +65,7 @@ sig
   val definitional_orientation   : theory -> term -> bool
   val oriented_rules_var         : unit Term_Tab.table Synchronized.var
   val get_orientation_schemes    : unit -> term list
+  val rules_in_simpset           : term list -> thm list
 
   (* Rewrite rules *)
   val meta_to_obj                      : thm -> thm
@@ -337,6 +340,24 @@ fun trace_log file str =
 
 fun create_log file =
   Synchronized.change log_var (fn () => File.write file "")
+
+fun html_table content =
+    let fun td str = enclose "<td>" "</td>" str
+        fun tr strs =
+          strs |> map td
+               |> space_implode "\n"
+               |> enclose "<tr>" "</tr>"
+    in content |> map tr
+               |> space_implode "\n"
+               |> enclose "<table border=\"1\" style=\"width:100%\">" "</table>"
+    end
+
+fun write_to_file filename str =
+    let val path = Path.explode filename
+        val _ = if File.exists path
+                then ()
+                else create_log path
+    in File.write path str end
 
 fun unique_names t =
   let fun unique names (Abs (v, T, t)) =
@@ -1043,6 +1064,20 @@ let
   end
 
 end
+
+fun rules_in_simpset ts =
+    let val const_names = Library.foldl (fn (ns, t) => Term.add_const_names t ns) ([], ts)
+        val set = Str_Tab.make_set const_names
+        val simps = (dest_ss (simpset_of @{context}))
+                      |> (map snd) o #simps
+    in simps
+         |> filter (fn thm => thm |> Thm.concl_of
+                                  |> fst o Logic.dest_equals
+                                  |> fst o strip_comb
+                                  |> (fn t => Term.add_const_names t [])
+                                  |> exists (Str_Tab.defined set))
+    end
+
 
 (* Antiquotation parsing metavariables *)
 val typ_pat_setup = 

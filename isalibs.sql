@@ -33,6 +33,7 @@ CREATE TABLE `experiments` (
   `generations` int(11) NOT NULL,
   `termsize` int(11) NOT NULL,
   `population` int(11) NOT NULL,
+  `hash` varchar(20) COLLATE utf8_bin NOT NULL,
   `time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_bin;
 
@@ -44,10 +45,11 @@ CREATE TABLE `experiments` (
 
 CREATE TABLE `individuals` (
   `id` int(11) NOT NULL,
-  `genome` mediumtext CHARACTER SET latin1 NOT NULL,
-  `subst` mediumtext CHARACTER SET latin1 NOT NULL,
-  `norm` mediumtext CHARACTER SET latin1 NOT NULL,
-  `fit` double NOT NULL
+  `genome` mediumtext COLLATE utf8_bin NOT NULL,
+  `subst` mediumtext COLLATE utf8_bin NOT NULL,
+  `norm` mediumtext COLLATE utf8_bin NOT NULL,
+  `hash` varchar(20) COLLATE utf8_bin NOT NULL,
+  `fit` text COLLATE utf8_bin NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_bin;
 
 -- --------------------------------------------------------

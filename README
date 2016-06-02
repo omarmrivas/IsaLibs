@@ -46,3 +46,9 @@ TIMEAOUT_PATH=path_to_timeout
 4) Run the following command to build the heap image and work with your theory
 
 isabelle jedit -d path_to_IsaLibs_root_file -l IsaLibs your_theory.thy
+
+
+— Build IsaLibs —
+
+isabelle build -d /Users/omarmrivas/Programs/IsaLibs/IsaLibs -b IsaLibs
+

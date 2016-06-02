@@ -28,6 +28,40 @@ ML_file "exhaust.ML"
 ML_file "gnuplot.ML"
 ML_file "mysql.ML"
 
+ML {*
+  val simps = Utils.rules_in_simpset
+    [@{term "op +"}, @{term "if x then y else z"}, @{term "[]"},
+     @{term "hd"}, @{term "tl"}, @{term "Suc"}, @{term "op #"}, @{term "op -"}]
+  val l = length simps
+  val content = simps |> map ((fn t => HTML.plain (Utils.string_of_term @{context} t)) o (Thm.full_prop_of))
+                      |> distinct (op =)
+                      |> map single
+                      |> map_index (fn (i,e) => string_of_int i :: e)
+  val table = Utils.html_table content
+  val _ = Utils.write_to_file "rewrite_set.html" table
+*}
+
+local_setup {*
+  fn lthy =>
+  let
+  val dest = MySQL.get_last_experiments lthy 20 "SumDest"
+  val consts = MySQL.get_last_experiments lthy 20 "SumConsts"
+  in lthy end
+*}
+
+(*lemma eval_Suc_nat [code_post]:
+   "Suc 0 = 1"
+   "Suc 1 = 2"
+   "Suc (numeral n) = numeral (Num.inc n)"
+   unfolding One_nat_def numeral_inc by simp_all
+
+ declare Num.inc.simps [code_post]
+
+value "Suc 42"
+value [code] "Suc 42"
+value [nbe] "Suc 42"
+value [simp] "Suc 42"*)
+
 setup {*
 DB_Counter_Example.setup_use_quickcheck #>
 DB_Counter_Example.setup_use_nitpick #>
@@ -67,14 +101,13 @@ declare [[
   use_aprove=true,
   generate_cps=false,
   max_time_in_termination = 20,
-  linarith_split_limit = 10
+  linarith_split_limit = 10,
+  eta_contract = false
   ]]
 
 text {* Associative operators must be oriented this way to avoid non-termination
         in case they are also Commutative operators. *}
 orient_rules "?X (?X (?x :: ?'a) (?y :: ?'a)) (?z :: ?'a) = ?X ?x (?X ?y ?z)"
-
-declare[[eta_contract = false]]
 
 ML {*
   val p1 = Multithreading.max_threads_value ()

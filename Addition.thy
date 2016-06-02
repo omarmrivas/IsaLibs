@@ -51,7 +51,7 @@ ML {*
 text {* We finally call the GP algorithm. *}
 
 local_setup {*
- fn lthy => 
+ fn lthy => .
   case GP.evolve false scheme lthy fitness finish term_size population_size generations bests mut_prob of
     SOME ind => (#ctxt ind)
   | NONE => lthy

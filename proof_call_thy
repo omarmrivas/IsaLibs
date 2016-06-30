@@ -1,0 +1,15 @@
+#!/bin/bash
+#
+
+FULLFILE=$1
+
+LOGIC=$2
+
+FILE=`echo ${FULLFILE%.*}`
+THEORY=`echo ${FILE##*/}`
+
+# Change to experiments/inductive_proofs directory
+cd experiments/inductive_proofs
+
+# Calling the isabelle process
+timeout -t 120 isabelle_process -e "use_thy \"$THEORY\";" -q -r $LOGIC

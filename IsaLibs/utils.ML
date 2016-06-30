@@ -14,7 +14,7 @@ sig
   val print_ss           : Proof.context -> unit
   val trace_log          : Path.T -> string -> unit
   val create_log         : Path.T -> unit
-  val html_table         : string list list -> string
+  val html_table         : string -> string list list -> string
   val write_to_file      : string -> string -> unit
 
   (* Discrete mathematics *)
@@ -24,6 +24,7 @@ sig
   
   (* Terms *)
   val string_of_term     : Proof.context -> term -> string
+  val html_string_of_term     : Proof.context -> term -> string
   val string_of_typ      : Proof.context -> typ -> string
   val int_of_string      : string -> int
   val unique_names       : term -> term
@@ -325,8 +326,15 @@ fun substitute (t', 0 :: pos) (Abs (v, T, t)) =
 
 fun string_of_term ctxt t =
     let
-      val ctxt' = Config.put show_markup false ctxt;
+      val ctxt' = ctxt |> Config.put show_markup false
+                       |> Config.put show_question_marks false
     in Print_Mode.setmp [] (Syntax.string_of_term ctxt') t end
+
+fun html_string_of_term ctxt t =
+    let
+      val ctxt' = ctxt |> Config.put show_markup false
+                       |> Config.put show_question_marks false
+    in HTML.html_mode (Syntax.string_of_term ctxt') t end
 
 fun string_of_typ ctxt ty =
     let
@@ -341,7 +349,7 @@ fun trace_log file str =
 fun create_log file =
   Synchronized.change log_var (fn () => File.write file "")
 
-fun html_table content =
+fun html_table id content =
     let fun td str = enclose "<td>" "</td>" str
         fun tr strs =
           strs |> map td
@@ -349,7 +357,8 @@ fun html_table content =
                |> enclose "<tr>" "</tr>"
     in content |> map tr
                |> space_implode "\n"
-               |> enclose "<table border=\"1\" style=\"width:100%\">" "</table>"
+               |> enclose ("<table id=\"" ^ id ^ "\" border=\"1\">") "</table>"
+(*               |> enclose "<table border=\"1\" style=\"width:100%\">" "</table>"*)
     end
 
 fun write_to_file filename str =

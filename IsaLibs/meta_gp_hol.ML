@@ -40,6 +40,7 @@ sig
     (individual -> bool) ->
     int -> int -> int -> int -> int -> real -> gp_result
 
+  val html_solutions : Proof.context -> gp_result list -> string list list
 end
 
 structure DB_GP
@@ -760,6 +761,24 @@ fun evolve parallel dbg empty_simpset log scheme terminating_closures recursive_
           |> (fn (statistic, global_pool) => loop 1 [statistic] global_pool) end)
   handle DONE ind => let val _ = tracing ("Solution: " ^ Utils.string_of_term (#ctxt ind) (#norm ind))
                      in Solved (ind, []) end
+
+fun different_solutions results =
+  results |> map_filter (fn r => case r of
+                              Solved (s, _) => SOME (#norm s, (snd o #subst) s)
+                             | _ => NONE)
+          |> (fn entries => fold Term_Tab.update entries Term_Tab.empty)
+          |> Term_Tab.dest
+
+fun html_solutions ctxt results =
+  let val results = different_solutions results
+      fun to_html t = HTML.plain (Utils.html_string_of_term ctxt t)
+      fun to_htmls substs = 
+          substs |> map (fn (v, lam) => to_html v ^ "&map;" ^
+                                        to_html lam)
+                           |> commas
+                           |> enclose "{" "}"
+  in results |> map_index (fn (i, (norm, subst)) => 
+                            [string_of_int i, to_html norm, to_htmls subst]) end
 
 end
 

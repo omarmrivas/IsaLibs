@@ -37,9 +37,23 @@ fun (tac1 INTERLEAVE' tac2) x =
 fun TRY' tac x = 
   TRY (tac x)
 
+fun vars_in_concl goal =
+  goal |> Utils.binder_elimination Const_Names.meta_forall []
+       |> fst
+       |> Logic.strip_imp_concl
+       |> (fn t => Term.add_frees t [])
+
+fun frees_in_concl goal =
+  goal |> Term.strip_all_body
+       |> Logic.strip_imp_concl
+       |> (fn t => Term.add_frees t [])
+
 (* Function that returns valid computational induction applications *)
 fun inductive_applications thy prop =
   let
+    val prop = prop |> Utils.binder_elimination Const_Names.meta_forall []
+                    |> fst
+                    |> Logic.strip_imp_concl
     fun inductive_apps thy prop =
       let
         val (t,args) = Term.strip_comb prop
@@ -63,41 +77,72 @@ fun inductive_applications thy prop =
     prop |> inductive_apps thy
          (* Applications with smaller arguments are considered first *)
          |> sort (fn args =>
-                    args |> pairself fst
-                         |> pairself (map Term.size_of_term)
-                         |> pairself (fn l => Library.foldl (op +) (0, l))
+                    args |> apply2 fst
+                         |> apply2 (map Term.size_of_term)
+                         |> apply2 (fn l => Library.foldl (op +) (0, l))
                          |> int_ord)
+(*         |> tap (map (fn (y, z) => y |> map (Syntax.string_of_term_global thy)
+                                     |> (fn str => str @ [Utils.str_of_thms [z]])
+                                     |> space_implode ", "
+                                     |> tracing))*)
          |> map (fn (y, z) => (transform y, z))
   end
 
-fun computational_induction_tac ctxt =
-  SUBGOAL (fn (goal, i) =>
-    let val thy = Proof_Context.theory_of ctxt
-        val vs_inducts = inductive_applications thy goal
+fun computation_induction_tac ctxt thy (goal, i) =
+    let val vs_inducts = inductive_applications thy goal
     in (no_tac, vs_inducts)
          |> Library.foldl (fn (thms,(vs,th)) =>
-             Induct_Tacs.induct_rules_tac ctxt [vs] [th] i
-             INTERLEAVE thms)
-    end)
+             (fn thh => DETERM (Induct_Tacs.induct_tac ctxt [vs] (SOME [th]) i) thh
+                        handle ERROR err => (tracing (err ^ " : " ^ Syntax.string_of_term ctxt goal); raise ERROR err))
+             APPEND thms)
+    end
 
 fun cases_tac ctxt =
    SUBGOAL (fn (goal, i) =>
-     let val frees = [] |> Term.add_frees goal
-                        |> map fst
+     let val frees = goal |> frees_in_concl
+                          |> map fst
      in
          List.foldl (op THEN_ALL_NEW) (fn _ => all_tac)
-                    (List.map (Induct_Tacs.case_tac ctxt) frees) i
+                    (List.map (fn n => Induct_Tacs.case_tac ctxt n [] NONE) frees) i
      end)
-   
-fun structural_induction_tac ctxt =
-  SUBGOAL (fn (goal, i) =>
-  let val frees = Term.add_frees goal []
-(*      val _ = tracing "Frees: "
-      val _ = map (tracing o (Syntax.string_of_term ctxt) o Free) frees*)
-      val fixes = Utils.binder_vars Const_Names.meta_forall [] goal
-(*      val _ = tracing "Fixes: "
-      val _ = map (tracing o (Syntax.string_of_term ctxt) o Free) fixes*)
-      val var_sets = (frees @ fixes)
+
+(* Split technique *)
+local
+ fun fold_atyps' f (Type (n, Ts)) a = fold (fold_atyps' f) Ts (f (Type (n, Ts)) a)
+   | fold_atyps' f T a = f T a
+ val add_type_namesT = fold_atyps' (fn Type (xi, _) => insert (op =) xi | _ => I)
+ fun get_split thy name = Global_Theory.get_thms thy (name ^ ".splits")
+                           handle ERROR _ => []
+ fun get_all_splits thy vars =
+  vars |> map snd
+       |> pair []
+       |> Library.foldl (fn (names, ty) => add_type_namesT ty names)
+       |> maps (get_split thy)
+in
+fun split_tactic ctxt thy vars (_, i) =
+     (no_tac, get_all_splits thy vars)
+      |> Library.foldl (fn (tac,split) => (DETERM (Splitter.split_tac ctxt [split] i)) APPEND tac)
+end
+
+fun cases_tac' ctxt frees_str (_, i) =
+     List.foldl (op THEN_ALL_NEW) (fn _ => all_tac)
+                (List.map (fn n => Induct_Tacs.case_tac ctxt n [] NONE) frees_str) i
+
+fun arbitrary_tac ctxt =
+   SUBGOAL (fn (goal, i) =>
+     let val frees = frees_in_concl goal
+     in
+        Induct.arbitrary_tac ctxt 0 frees i
+     end)
+
+fun arbitrary_tac' ctxt (goal, i)  =
+     let val frees = frees_in_concl goal
+     in
+        Induct.arbitrary_tac ctxt 0 frees i
+     end
+
+fun structural_induction_tac ctxt frees fixes (goal, i) =
+  let val var_sets = (frees @ fixes)
                         |> distinct (op =)
                         (* Select only inductive vars *)
                         |> map_filter (fn (s, T) =>
@@ -107,7 +152,7 @@ fun structural_induction_tac ctxt =
                                  else SOME ((s, T), ind_rules)
                               end)
                         (* Group sets of vars with the same type *)
-                        |> Library.partition_eq (is_equal o Term_Ord.typ_ord o (pairself (snd o fst)))
+                        |> Library.partition_eq (is_equal o Term_Ord.typ_ord o (apply2 (snd o fst)))
                         |> maps (fn l => let val rules = (single o hd o snd o hd) l
                                              val vs = map (SOME o fst o fst) l
 (*                                             val vss = Utils.subsets vs*)
@@ -116,93 +161,161 @@ fun structural_induction_tac ctxt =
   in
     (no_tac, var_sets)
       |> Library.foldl (fn (thms,(v,th)) =>
-           (*let val _ = tracing ("Induction rule: " ^ (th |> Thm.full_prop_of |> Syntax.string_of_term ctxt))
-           in*) Induct_Tacs.induct_rules_tac ctxt [[v]] [th] i
-              INTERLEAVE thms (*end*))
-  end)
-
-fun check_fail_proof_state sts ctxt =
-  SUBGOAL (fn (goal, _) =>
-  let val thy = Proof_Context.theory_of ctxt
-      val _ = sts := Net.insert_term_safe (Pattern.equiv thy) (goal,goal) (!sts)
-  in no_tac end)
-
-(*fun check_fail_proof_state sts ctxt tac =
-  SOLVE (fn th => 
-  let val thy = Proof_Context.theory_of ctxt
-      val thms_seq = tac th
-      val thm_list = Seq.list_of thms_seq
-      val _ = tracing ((string_of_int o length) thm_list)
-      val _ = thm_list |> map (fn th =>
-                                    let val goal = Thm.full_prop_of th
-                                        val _ = tracing ("TACTIC: " ^ Syntax.string_of_term ctxt goal)
-                                    in sts := Net.insert_term_safe (Pattern.equiv thy) (goal,goal) (!sts) end)
-  in thms_seq end)*)
+           (fn thh => DETERM (Induct_Tacs.induct_tac ctxt [[v]] (SOME [th]) i) thh
+                            handle ERROR err => (tracing (err ^ " : " ^ Syntax.string_of_term ctxt goal);
+                                               tracing "Frees: ";
+                                               map (tracing o (Syntax.string_of_term ctxt) o Free) frees;
+                                               tracing "Fixes: ";
+                                               map (tracing o (Syntax.string_of_term ctxt) o Free) fixes;
+                                               raise ERROR err))
+              APPEND thms)
+  end
 
 (* simple auto tac *)
-fun auto_clasimpset_tac ctxt (_:int) = CHANGED (auto_tac ctxt)
+fun auto_clasimpset_tac ctxt (_:int) =
+  CHANGED (auto_tac ctxt)
 
-(* simple simp_all tac *)
-fun simp_all_tac ctxt (_:int) = (CHANGED o PARALLEL_GOALS o ALLGOALS o full_simp_tac) ctxt
+fun only_structural_induction_tac ctxt (goal, i) =
+  let val frees = frees_in_concl goal
+      val vars = vars_in_concl goal
+      val fixes = subtract (op =) frees vars
+(*      val _ = (tracing "Frees: ";
+               map (tracing o (Syntax.string_of_term ctxt) o Free) frees;
+               tracing "Vars: ";
+               map (tracing o (Syntax.string_of_term ctxt) o Free) vars;
+               tracing "Fixes: ";
+               map (tracing o (Syntax.string_of_term ctxt) o Free) fixes)*)
+  in structural_induction_tac ctxt frees fixes (goal, i) end
 
-(*fun primitive_induction ctxt = (EVERY' [cases_tac ctxt INTERLEAVE'
-         computational_induction_tac ctxt INTERLEAVE'
-         structural_induction_tac ctxt,
-         auto_clasimpset_tac ctxt])*)
-
-fun primitive_induction ctxt = (cases_tac ctxt APPEND'
-         computational_induction_tac ctxt APPEND'
-         structural_induction_tac ctxt)
-         THEN' auto_clasimpset_tac ctxt
-
-      (* induct and auto tac *)
-fun induct_auto_tac fails ctxt =
-    SOLVE ((CHANGED o ALLGOALS)
-      ((((simp_all_tac ctxt)) THEN' primitive_induction ctxt
-        ORELSE' primitive_induction ctxt)
-      THEN' (TRY' (check_fail_proof_state fails ctxt))))
-
-      (* induct and auto tac *)
-(*fun induct_auto_tac' fails ctxt =
-    SOLVE ((CHANGED o ALLGOALS)
-      ((primitive_induction ctxt)
-      THEN' (check_fail_proof_state fails ctxt)))*)
+fun primitive_induction ctxt (goal, i) =
+  let val thy = Proof_Context.theory_of ctxt
+      val frees = frees_in_concl goal
+      val vars = vars_in_concl goal
+      val fixes = subtract (op =) frees vars
+      val tac' = (structural_induction_tac ctxt frees fixes (goal, i) APPEND
+                  computation_induction_tac ctxt thy (goal, i) APPEND
+                  split_tactic ctxt thy vars (goal, i))
+      val tac = tac' THEN (auto_clasimpset_tac ctxt i)
+  in tac ORELSE tac'
+  end
 
 fun ind_auto_tac ctxt =
     (CHANGED o ALLGOALS)
-      ((TRY' (simp_all_tac ctxt)) THEN' primitive_induction ctxt)
-
+       (SUBGOAL (primitive_induction ctxt))
 
 (* Probably there is a better way to know if we have proved the theorem *)
 (* this function won't work in goals with spurious premises *)
-fun theorem_proved thm = 
+fun theorem_proved' thm = Thm.no_prems thm
+
+fun theorem_proved timeout timer thm = 
   if Thm.no_prems thm
   then true
-  else false
-  
+  else let val t_end = timer |> Timing.result
+                             |> #elapsed
+                             |> Time.toSeconds
+       in t_end >= timeout end
+
 (* Our heuristic is simply the number of premises (in our interpretation... the pending goals)
    plus the depth in search (shorter proofs are preferred). *)
 fun theorem_heuristic i thm = Thm.nprems_of thm + i
 
 (* A* search: similar to BEST_FIRST but current level of search is taken into account *)
-fun astar_induct_auto_tac (fails : term Net.net Unsynchronized.ref)
-                          (ctxt : Proof.context) =
-    ASTAR (theorem_proved,theorem_heuristic) (induct_auto_tac fails ctxt)
-
+fun bfirst_ind_auto_tac (ctxt : Proof.context) =
+  let val timeout = Prover.max_time_in_proof
+                      |> Config.get ctxt
+      val start = Timing.start ()
+  in
+    BEST_FIRST (theorem_proved timeout start,theorem_heuristic 0) (ind_auto_tac ctxt)
+  end
 (* A* search: similar to BEST_FIRST but current level of search is taken into account *)
-fun astar_ind_auto_tac (ctxt : Proof.context) =
-  ASTAR (theorem_proved,theorem_heuristic) (ind_auto_tac ctxt)
+fun astar_ind_auto_tac (ctxt : Proof.context) thm =
+  let val timeout = Prover.max_time_in_proof
+                      |> Config.get ctxt
+      val _ = thm |> ((fn t => HTML.plain (Utils.html_string_of_term ctxt t)) o (Thm.full_prop_of))
+                  |> (fn str => tracing ("HTML: " ^ str))
+  in
+    TimeLimit.timeLimit (Time.fromSeconds timeout) (ASTAR (theorem_proved',theorem_heuristic) (ind_auto_tac ctxt)) thm
+      handle TimeLimit.TimeOut => Seq.empty
+  end
 
-fun iter_dep_ind_auto_tac (ctxt : Proof.context) =
-  ITER_DEEPEN 10 (fn _ => true) (fn _ => ind_auto_tac ctxt)
+fun iter_dep_ind_auto_tac (ctxt : Proof.context) thm =
+  let val timeout = Prover.max_time_in_proof
+                      |> Config.get ctxt
+      val _ = thm |> ((fn t => HTML.plain (Utils.html_string_of_term ctxt t)) o (Thm.full_prop_of))
+                  |> (fn str => tracing ("HTML: " ^ str))
+  in
+    TimeLimit.timeLimit (Time.fromSeconds timeout) (ITER_DEEPEN 10 theorem_proved' (fn _ => ind_auto_tac ctxt)) thm
+      handle TimeLimit.TimeOut => Seq.empty
+  end
 
-val method_setup =
-  Method.setup (Binding.name "induct_auto")
+fun dep_ind_auto_tac (ctxt : Proof.context) thm =
+  let val timeout = Prover.max_time_in_proof
+                      |> Config.get ctxt
+      val _ = thm |> ((fn t => HTML.plain (Utils.html_string_of_term ctxt t)) o (Thm.full_prop_of))
+                  |> (fn str => tracing ("HTML: " ^ str))
+  in
+    TimeLimit.timeLimit (Time.fromSeconds timeout) (DEPTH_FIRST theorem_proved' (ind_auto_tac ctxt)) thm
+      handle TimeLimit.TimeOut => Seq.empty
+  end
+
+fun breadth_first_ind_auto_tac (ctxt : Proof.context) thm =
+  let val timeout = Prover.max_time_in_proof
+                      |> Config.get ctxt
+      val _ = thm |> ((fn t => HTML.plain (Utils.html_string_of_term ctxt t)) o (Thm.full_prop_of))
+                  |> (fn str => tracing ("HTML: " ^ str))
+  in
+    TimeLimit.timeLimit (Time.fromSeconds timeout) (BREADTH_FIRST theorem_proved' (ind_auto_tac ctxt)) thm
+      handle TimeLimit.TimeOut => Seq.empty
+  end
+
+val method_setup_comp =
+  Method.setup (Binding.name "computational_induct")
+    (Scan.succeed (fn ctxt => SIMPLE_METHOD ((CHANGED o ALLGOALS) (SUBGOAL (computation_induction_tac ctxt (Proof_Context.theory_of ctxt))))))
+    "interleave induction and auto"
+
+val method_setup_struct =
+  Method.setup (Binding.name "structural_induct")
+    (Scan.succeed (fn ctxt => SIMPLE_METHOD ((CHANGED o ALLGOALS) (SUBGOAL (only_structural_induction_tac ctxt)))))
+    "interleave induction and auto"
+
+val method_setup_arbitrary =
+  Method.setup (Binding.name "arbitrary_tac")
+    (Scan.succeed (fn ctxt => SIMPLE_METHOD ((CHANGED o ALLGOALS) (arbitrary_tac ctxt))))
+    "interleave induction and auto"
+
+val method_setup_astar =
+  Method.setup (Binding.name "induct_auto_astar")
     (Scan.succeed (fn ctxt => SIMPLE_METHOD (astar_ind_auto_tac ctxt)))
     "interleave induction and auto"
 
-val _ = Context.>> (Context.map_theory method_setup)
+val method_setup_best =
+  Method.setup (Binding.name "induct_auto_best")
+    (Scan.succeed (fn ctxt => SIMPLE_METHOD (bfirst_ind_auto_tac ctxt)))
+    "interleave induction and auto"
 
+val method_setup_iter_dep =
+  Method.setup (Binding.name "induct_auto_iter_dep")
+    (Scan.succeed (fn ctxt => SIMPLE_METHOD (iter_dep_ind_auto_tac ctxt)))
+    "interleave induction and auto"
+
+val method_setup_dep_first =
+  Method.setup (Binding.name "induct_auto_dep_first")
+    (Scan.succeed (fn ctxt => SIMPLE_METHOD (dep_ind_auto_tac ctxt)))
+    "interleave induction and auto"
+
+val method_setup_breadth_first =
+  Method.setup (Binding.name "induct_auto_breadth_first")
+    (Scan.succeed (fn ctxt => SIMPLE_METHOD (breadth_first_ind_auto_tac ctxt)))
+    "interleave induction and auto"
+
+val _ = Context.>> (Context.map_theory method_setup_comp)
+val _ = Context.>> (Context.map_theory method_setup_struct)
+val _ = Context.>> (Context.map_theory method_setup_arbitrary)
+val _ = Context.>> (Context.map_theory method_setup_astar)
+val _ = Context.>> (Context.map_theory method_setup_best)
+val _ = Context.>> (Context.map_theory method_setup_iter_dep)
+val _ = Context.>> (Context.map_theory method_setup_dep_first)
+val _ = Context.>> (Context.map_theory method_setup_breadth_first)
     
 end
 

@@ -278,7 +278,7 @@ fun make_theorem_set thms =
        |> map_index (fn (i, th) => Thm.incr_indexes i th)
        |> pair Net.empty
        |> Library.foldl (fn (net, th) =>
-            Net.insert_term_safe Thm.equiv_thm (Thm.full_prop_of th, th) net)
+            Net.insert_term_safe (Thm.equiv_thm (Thm.theory_of_thm th)) (Thm.full_prop_of th, th) net)
        |> Net.content
        |> zero_var_indexes_list
 

@@ -5,6 +5,29 @@ keywords "rec_complete" :: thy_decl and
          "complete" :: thy_goal and
          "orient_rules" :: thy_decl
 begin
+
+ML {*
+  implode (map (HTML.present_span keywords) spans)
+*}
+
+ML {*
+val temp_log = Path.explode "experiments/inductive_proofs/temp.log"
+fun html_string_of_term ctxt t =
+    let
+      val ctxt' = ctxt |> Config.put show_markup false
+                       |> Config.put show_question_marks false
+    in Print_Mode.setmp [] (Syntax.string_of_term ctxt') t end
+
+    val str = html_string_of_term @{context} @{term "x + y = y + x"}
+
+    val aa = (map Symbol.output o Symbol.explode) str
+    val html_symbols = HTML.make_symbols aa
+
+    val rr = HTML.present_span html_symbols Keyword.empty_keywords
+
+    val _ = File.write  temp_log str
+*}
+
 ML_file "$ISABELLE_HOME/src/HOL/TPTP/sledgehammer_tactics.ML"
 ML_file "const_names.ML"
 ML_file "tables.ML"

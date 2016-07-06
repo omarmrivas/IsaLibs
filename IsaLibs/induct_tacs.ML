@@ -220,12 +220,14 @@ fun theorem_proved timeout timer thm =
 fun theorem_heuristic i thm = Thm.nprems_of thm + i
 
 (* A* search: similar to BEST_FIRST but current level of search is taken into account *)
-fun bfirst_ind_auto_tac (ctxt : Proof.context) =
+fun bfirst_ind_auto_tac (ctxt : Proof.context) thm =
   let val timeout = Prover.max_time_in_proof
                       |> Config.get ctxt
-      val start = Timing.start ()
+      val _ = thm |> ((fn t => HTML.plain (Utils.html_string_of_term ctxt t)) o (Thm.full_prop_of))
+                  |> (fn str => tracing ("HTML: " ^ str))
   in
-    BEST_FIRST (theorem_proved timeout start,theorem_heuristic 0) (ind_auto_tac ctxt)
+    TimeLimit.timeLimit (Time.fromSeconds timeout) (BEST_FIRST (theorem_proved',theorem_heuristic 0) (ind_auto_tac ctxt)) thm
+      handle TimeLimit.TimeOut => Seq.empty
   end
 (* A* search: similar to BEST_FIRST but current level of search is taken into account *)
 fun astar_ind_auto_tac (ctxt : Proof.context) thm =

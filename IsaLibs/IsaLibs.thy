@@ -172,7 +172,7 @@ ML {*
   let val start = Timing.start ()
   in
 (*    ("timeout -t " ^ (string_of_int timeout) ^ " ./proof_call_thy " ^ smt_file)*)
-    (" ./proof_call_thy " ^ smt_file)
+    (" ./proof_call_thy " ^ smt_file ^ " " ^ thy)
       |> Isabelle_System.bash_output
       |> (fn (out, _) => let val elapsed = start |> Timing.result
                                              |> #elapsed
@@ -228,17 +228,17 @@ ML {*.
                     |> get_thy_files
 (*                    |> single o hd*)
   val _ = tracing ("Problems: " ^ (string_of_int o length) smt_files)
-  val thy = "IsaHipster"
-  val prover = "hipster_induct_simp"
+  val thy = "IsaLibs"
+  val prover = "induct_auto_best"
   fun check foo = if foo then "&#x2713;" else "&#x2717;"
   val params = ({stack_limit=NONE, interrupts=false} : Simple_Thread.params)
-  val PID = 83900
+  val PID = 7632
   val thread = Simple_Thread.fork params (clean_loop PID)
   val _ = tracing ("Is active: " ^ (if Thread.isActive thread then "yes" else "no"))
   val results = smt_files |> map_index I
                           |> Par_List.map (fn (i, file) => (Utils.trace_log ps_log (string_of_int i ^ ": " ^ file); (i, proof_call_thy file thy prover)))
                           |> map_filter (fn (i, (x, y, goal, z)) => if goal = "BAD" then NONE else SOME (i, (x, y, goal, z)))
-                          |> map (fn (i, (proved, time, conjecture, file)) => [string_of_int i, conjecture, file, check proved, string_of_real time])
+                          |> map (fn (i, (proved, time, conjecture, file)) => [string_of_int i, conjecture, file, check proved, if time > 60.0 then "60.0" else string_of_real time])
   val theorems_proved = Library.foldl (fn (c, [_, _, _, proved, _]) => if "&#x2713;" = proved then c + 1 else c | (c,_) => c) (0, results)
   val theorems_not_proved = length results - theorems_proved
   val theorems_proved_percent = ((Real.fromInt) theorems_proved) / ((Real.fromInt o length) results) * 100.0
@@ -255,18 +255,18 @@ ML {*.
                                                        |> (fn (c,time) => time / ((Real.fromInt) c))
   val table = Utils.html_table "alldata" (["<b>No.</b>", "<b>Conjecture</b>", "<b>File</b>", "<b>Proved</b>", "<b>Time</b>"] :: results)
   val header_content = [["<b>Proved</b>", "<b>Not proved</b>", "<b>Proved &#37;</b>", "<b>Not proved &#37;</b>", "<b>Avg cpu time</b>", "<b>Avg proved</b>", "<b>Avg not proved</b>"],
-                        [string_of_int theorems_proved, 
-                         string_of_int theorems_not_proved, 
+                        [string_of_int theorems_proved,
+                         string_of_int theorems_not_proved,
                          string_of_real theorems_proved_percent ^ "&#37;", 
-                         string_of_real theorems_not_proved_percent ^ "&#37;", 
+                         string_of_real theorems_not_proved_percent ^ "&#37;",
                          string_of_real average_cpu_time ^ "s", 
                          string_of_real average_cpu_time_proved ^ "s", 
                          string_of_real average_cpu_time_not_proved ^ "s"]]
   val table_header = Utils.html_table "statistics" header_content
   val begin = HTML.begin_document ("Results for " ^ prover)
   val ed = HTML.end_document
-  val _ = Utils.write_to_file ("experiments/inductive_proofs/" ^ prover ^ ".html") (begin ^ table_header ^ table ^ ed)
-  val _ = OS.Process.sleep (seconds 6.0)
+  val _ = Utils.write_to_file ("experiments/inductive_proofs/" ^ prover ^ ".html") (begin ^ table_header ^ "<br>" ^ table ^ ed)
+  val _ = OS.Process.sleep (seconds 240.0)
   val _ = Synchronized.change process_ref (fn _ => true)
   val _ = Simple_Thread.join thread
 *}

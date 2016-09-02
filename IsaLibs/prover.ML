@@ -11,10 +11,11 @@ sig
 
   val max_time_in_proof  : int Config.T
 
-  val prove                        : local_theory -> thm list option -> Method.text -> 
+  val prove                        : local_theory -> thm list option -> Method.text_range -> 
                                      term -> int -> thm option
 
   val  cheat_prover : Proof.context -> term -> thm
+  val induct_auto_method : Proof.context -> Method.text_range
 end
 
 structure DB_Prover
@@ -33,8 +34,8 @@ val method_setup =
 
 val _ = Context.>> (Context.map_theory method_setup)
 
-fun sledgehammer_method ctxt = Utils.parse ctxt Method.parse "spass_auto" |> fst o fst
-fun induct_auto_method ctxt = Utils.parse ctxt Method.parse "induct_auto" |> fst o fst
+fun sledgehammer_method ctxt = Utils.parse ctxt (Method.parser 1) "spass_auto" |> fst
+fun induct_auto_method ctxt = Utils.parse ctxt (Method.parser 1) "induct_auto" |> fst
 
 fun prove_from_method ctxt0 (SOME simps) method conjecture =
   let val ctxt = ctxt0 addsimps simps
@@ -53,7 +54,8 @@ fun prove_from_method ctxt0 (SOME simps) method conjecture =
            |> snd
            |> Proof.theorem NONE (K I) [[(conjecture, [])]]
            |> Proof.apply method
-           |> Seq.hd
+(*           |> Seq.hd*)
+           |> (Seq.hd o Seq.filter_results)
            |> `Proof.goal
            ||> Proof.global_done_proof
            (* FIXME: facts should be used in a locale or type class context! *)
@@ -61,7 +63,7 @@ fun prove_from_method ctxt0 (SOME simps) method conjecture =
                   if 0 = Thm.nprems_of goal 
                   then SOME (goal
                                |> Goal.finish ctxt
-                               |> Thm.check_shyps (Variable.sorts_of ctxt)
+(*                               |> Thm.check_shyps (Variable.sorts_of ctxt)*)
                                |> Assumption.export false ctxt ctxt0
                                |> single
                                |> Variable.export ctxt ctxt0

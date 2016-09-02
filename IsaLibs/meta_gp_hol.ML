@@ -135,8 +135,8 @@ fun mk_subst vars trms =
        |> (fn r => ([], r))
 
 fun prepare (data : gp_data) ((typs, terms) : subst) =
-  (map (apply2 (Thm.ctyp_of (#ctxt data))) typs,
-   map (apply2 (Thm.cterm_of (#ctxt data))) terms)
+  (map (fn (ty, ty') => (dest_TVar ty, Thm.ctyp_of (#ctxt data) ty')) typs,
+   map (fn (t, t') => (dest_Var t, Thm.cterm_of (#ctxt data) t')) terms)
     |> (fn csubst => Drule.instantiate_normalize csubst (#scheme data))
 (*    |> tap (tracing o Utils.str_of_thms o single)*)
     |> (fn thm => if (#empty_simpset data)
@@ -146,8 +146,8 @@ fun prepare (data : gp_data) ((typs, terms) : subst) =
     |> snd o Logic.dest_equals o Thm.full_prop_of
 
 fun prepare_closure (data : gp_data) simp ((typs, terms) : subst) =
-  (map (apply2 (Thm.ctyp_of (#ctxt data))) typs,
-   map (apply2 (Thm.cterm_of (#ctxt data))) terms)
+  (map (fn (ty, ty') => (dest_TVar ty, Thm.ctyp_of (#ctxt data) ty')) typs,
+   map (fn (t, t') => (dest_Var t, Thm.cterm_of (#ctxt data) t')) terms)
     |> (fn csubst => Drule.instantiate_normalize csubst simp)
     |> Thm.full_prop_of
     |> HOLogic.dest_Trueprop
@@ -157,8 +157,8 @@ fun prepare_closure (data : gp_data) simp ((typs, terms) : subst) =
     |> list_comb
 
 fun count_rcalls (data : gp_data) f simp ((typs, terms) : subst) =
-  (map (apply2 (Thm.ctyp_of (#ctxt data))) typs,
-   map (apply2 (Thm.cterm_of (#ctxt data))) terms)
+  (map (fn (ty, ty') => (dest_TVar ty, Thm.ctyp_of (#ctxt data) ty')) typs,
+   map (fn (t, t') => (dest_Var t, Thm.cterm_of (#ctxt data) t')) terms)
     |> (fn csubst => Drule.instantiate_normalize csubst simp)
     |> Thm.full_prop_of
     |> HOLogic.dest_Trueprop
@@ -294,7 +294,7 @@ fun initial_population (data : gp_data) =
                                                                NONE)
                                         | unknown => (tracing ("Unknown error(genome): " ^ Utils.str_of_terms ctxt trms);
                                                       tracing ("Unknown error(norm): " ^ Utils.string_of_term ctxt i);
-                                                      raise unknown)) end
+                                                      reraise unknown)) end
                        else let (*val time = Date.toString (Date.fromTimeLocal (Time.now ()))
                                 val _ = tracing (time ^ " (bad) " ^ Syntax.string_of_term ctxt i)*)
                             in NONE end
@@ -635,7 +635,7 @@ fun next_generation (data : gp_data)
                                                                         (#bad_fitness data))
                                                 | unknown => (tracing ("Unknown error(genome): " ^ Utils.str_of_terms ctxt trms);
                                                               tracing ("Unknown error(norm): " ^ Utils.string_of_term ctxt i');
-                                                              raise unknown))
+                                                              reraise unknown))
                                               |> SOME end
 (*                                         in (#fitness data) ctxt closures end*)
                                     else let (*val time = Date.toString (Date.fromTimeLocal (Time.now ()))
@@ -771,8 +771,8 @@ fun different_solutions results =
 
 fun html_solutions ctxt results =
   let val results = different_solutions results
-      fun to_html t = HTML.plain (Utils.html_string_of_term ctxt t)
-      fun to_htmls substs = 
+      fun to_html t = myHTML.plain (Utils.html_string_of_term ctxt t)
+      fun to_htmls substs =
           substs |> map (fn (v, lam) => to_html v ^ "&map;" ^
                                         to_html lam)
                            |> commas

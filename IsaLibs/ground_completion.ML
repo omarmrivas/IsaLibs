@@ -17,7 +17,7 @@ sig
   val generate_cps                  : bool Config.T
 
   val unify_inst                    : Proof.context -> Envir.env -> 
-                                      (ctyp * ctyp) list * (cterm * cterm) list
+                                      ((indexname * sort) * ctyp) list * ((indexname * typ) * cterm) list
 
   val discriminate_rules            : Proof.context -> (thm list -> bool) -> 
                                       thm list -> thm list * thm list
@@ -70,10 +70,10 @@ fun subsets s =
 
 (* instantiation utilities *)
 fun prep_trm thy env (x, (T, _)) =
-    (Thm.cterm_of thy (Var (x, Envir.norm_type (Envir.type_env env) T)), Thm.cterm_of thy (Envir.norm_term env (Var (x, T))))
+    ((x, Envir.norm_type (Envir.type_env env) T), Thm.cterm_of thy (Envir.norm_term env (Var (x, T))))
 
 fun prep_ty thy env (x, (S, _)) =
-      (Thm.ctyp_of thy (TVar (x, S)), Thm.ctyp_of thy (Envir.norm_type (Envir.type_env env) (TVar (x, S))))
+      ((x, S), Thm.ctyp_of thy (Envir.norm_type (Envir.type_env env) (TVar (x, S))))
 
 fun unify_inst ctxt env = 
     let
@@ -364,8 +364,6 @@ fun memoized_joinable' ctxt terminates f_map E e =
 local
   val pat = @{term_pat "?X (?lhs :: ?'a) \<equiv> ?X (?rhs :: ?'a)"}
   val pat' = @{term_pat "(?lhs :: ?'a) = (?rhs :: ?'a)"}
-(*  val method = Method.Basic (SIMPLE_METHOD o InductiveTacs4.bef_induct_auto_tac)*)
-  val method = Method.Basic (SIMPLE_METHOD o (InductiveTacs4.bef_induct_auto_tac (Unsynchronized.ref Net.empty)))
 in
 fun heuristic1 ctxt proof_timeOut lemmas rule : thm option =
   let val thy = Proof_Context.theory_of ctxt
@@ -376,7 +374,7 @@ fun heuristic1 ctxt proof_timeOut lemmas rule : thm option =
                       |> HOLogic.mk_Trueprop
       val timeOut = Config.get ctxt Counter_Example.max_time_in_counter_ex
   in case Counter_Example.unfalsified_conjecture ctxt timeOut conj of
-      SOME conj => Prover.prove ctxt (SOME lemmas) method conj proof_timeOut
+      SOME conj => Prover.prove ctxt (SOME lemmas) (Prover.induct_auto_method ctxt) conj proof_timeOut
     | NONE => NONE
   end handle Pattern.MATCH => NONE
 end
@@ -442,7 +440,7 @@ fun orient ctxt global_meta_rws ord terminates f_map =
 (*                            |> Raw_Simplifier.rewrite_rule ctxt global_meta_rws*)
                             |> Utils.orient_rule thy ord
                             |> Utils.obj_to_meta
-                            |> (fn th => if Thm.equiv_thm (@{thm "TrueI"},th)
+                            |> (fn th => if Thm.equiv_thm thy (@{thm "TrueI"},th)
                                          then Utils.obj_to_meta @{thm "refl"}
                                          else th)
               (*val _ = tracing ("Después: " ^ Utils.str_of_thms [th'])*)
@@ -528,8 +526,9 @@ fun run_completion global_meta_rws ctxt terminates E e =
 
 fun run_completion' global_meta_rws ctxt terminates E e =
     let val rules = run_completion global_meta_rws ctxt terminates E e
-        val additions = filter_out (fn r => exists (Thm.equiv_thm o pair r) E) rules
-        val deletions = filter_out (fn e => exists (Thm.equiv_thm o pair e) rules) E
+        val thy = Proof_Context.theory_of ctxt
+        val additions = filter_out (fn r => exists (Thm.equiv_thm thy o pair r) E) rules
+        val deletions = filter_out (fn e => exists (Thm.equiv_thm thy o pair e) rules) E
     in (additions, deletions) end
 
 end

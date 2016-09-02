@@ -30,7 +30,8 @@ val (simp_before, setup_simp_before) = Attrib.config_bool @{binding "simp_before
 val (max_time_in_counter_ex, setup_max_time_in_counter_ex) = Attrib.config_int @{binding "max_time_in_counter_ex"} (K 5)
 
 val nitpick_params = Nitpick_Commands.default_params @{theory} []
-fun simp_method ctxt = Utils.parse ctxt Method.parse "simp" |> fst o fst
+(*fun simp_method ctxt = Utils.parse ctxt Method.parse "simp" |> fst o fst*)
+fun simp_method ctxt = Utils.parse ctxt (Method.parser 1) "simp" |> fst
 
 fun get_nitpick_params
    ({cards_assigns: (typ option * int list) list,
@@ -43,7 +44,6 @@ fun get_nitpick_params
      monos: (typ option * bool option) list,
      wfs: ((string * typ) option * bool option) list,
      sat_solver: string,
-     blocking: bool,
      falsify: bool,
      debug: bool,
      verbose: bool,
@@ -73,8 +73,6 @@ fun get_nitpick_params
      atomss: (typ option * string list) list,
      max_potential: int,
      max_genuine: int,
-     check_potential: bool,
-     check_genuine: bool,
      batch_size: int,
      expect: string, ...} : Nitpick.params) timeOut =
     {cards_assigns = cards_assigns,
@@ -87,7 +85,6 @@ fun get_nitpick_params
      monos = monos,
      wfs = wfs,
      sat_solver = sat_solver,
-     blocking = blocking,
      falsify = falsify,
      debug = debug,
      verbose = verbose,
@@ -117,8 +114,6 @@ fun get_nitpick_params
      atomss = atomss,
      max_potential = max_potential,
      max_genuine = max_genuine,
-     check_potential = check_potential,
-     check_genuine = check_genuine,
      batch_size = batch_size,
      expect = expect}
 
@@ -146,7 +141,8 @@ fun nitpick timeOut state =
 fun quickcheck_nitpick_raw ctxt timeOut conjecture =
     ctxt |> Proof.theorem NONE (K I) [[(conjecture, [])]]
          |> (fn state => if Config.get (Proof.context_of state) simp_before
-                         then Seq.hd (Proof.apply (simp_method (Proof.context_of state)) state)
+                         then (Proof.apply (simp_method (Proof.context_of state)) state)
+                                |> (Seq.hd o Seq.filter_results)
                          else state)
          |> (fn state => state |> Utils.safe_eval "counter_example 164" (false, state) (quickcheck timeOut)
                                |> (fn (foo,_) => (foo, state)))

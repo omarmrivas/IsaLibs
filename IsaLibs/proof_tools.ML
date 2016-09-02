@@ -54,7 +54,7 @@ fun normalise_thm ctxt simps thm =
                        then ()
                        else Utils.create_log path;
                        Utils.trace_log path ("Unknown: " ^ Utils.str_of_thms [thm]);
-                       raise unknown)
+                       reraise unknown)
   end
 
 fun normalise_thm_empty_simpset ctxt simps thm =
@@ -277,7 +277,7 @@ fun meta_induction_aux method ctxt thy proof_timeout
                   |> Utils.definitional_dependencies thy
                   |> map fst
       val simps = maps (Utils.get_rewrites thy) consts
-      fun test_simp th = exists (Thm.equiv_thm o pair th) simps
+      fun test_simp th = exists (Thm.equiv_thm thy o pair th) simps
       val f_map = Utils.definitional_dependencies thy ([], conjecture)
                     |> map Const
                     |> map (rpair 0)
@@ -285,6 +285,7 @@ fun meta_induction_aux method ctxt thy proof_timeout
       let val net = Unsynchronized.ref Net.empty
           val set = Unsynchronized.ref Net.empty
           val method = Method.Basic (SIMPLE_METHOD o (InductiveTacs4.induct_auto_tac' set net))
+                        |> rpair Position.no_range
           val terminates = Aprove.memoized_terminates ctxt
           val lemmas' = map Utils.obj_to_meta lemmas
           val conjecture' = (Logic.mk_equals o HOLogic.dest_eq o HOLogic.dest_Trueprop) conjecture
@@ -309,8 +310,8 @@ fun meta_induction_aux method ctxt thy proof_timeout
       else NONE
     val lemmas = global_lemmas ctxt conjecture
   in case alpha 0 lemmas [conjecture] of
-      SOME rules => let val additions = filter_out (fn r => exists (Thm.equiv_thm o pair r) lemmas) rules
-                        val deletions = filter_out (fn e => exists (Thm.equiv_thm o pair e) rules) lemmas
+      SOME rules => let val additions = filter_out (fn r => exists (Thm.equiv_thm thy o pair r) lemmas) rules
+                        val deletions = filter_out (fn e => exists (Thm.equiv_thm thy o pair e) rules) lemmas
                     in SOME (additions, deletions) end
     | NONE => NONE
   end

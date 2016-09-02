@@ -334,7 +334,7 @@ fun html_string_of_term ctxt t =
     let
       val ctxt' = ctxt |> Config.put show_markup false
                        |> Config.put show_question_marks false
-    in HTML.html_mode (Syntax.string_of_term ctxt') t end
+    in myHTML.html_mode (Syntax.string_of_term ctxt') t end
 
 fun string_of_typ ctxt ty =
     let
@@ -1033,7 +1033,7 @@ val rule_int_ord = order_ints_raw o Thm.concl_of
 end
 fun str_of_thms thms = 
   let fun str_of_cterm thy t = Syntax.string_of_term_global thy (Thm.term_of t)
-      fun str_of_thm thy thm = str_of_cterm thy (#prop (Thm.crep_thm thm))
+      fun str_of_thm thy thm = str_of_cterm thy (Thm.cprop_of thm)
   in commas (map (fn th => str_of_thm (Thm.theory_of_thm th) th) thms) end
 
 fun str_of_terms ctxt terms =
@@ -1042,7 +1042,7 @@ fun str_of_terms ctxt terms =
 
 local 
   fun pretty_cterm ctxt ctrm =
-    Syntax.pretty_term ctxt (Thm.term_of ctrm)
+    Syntax.pretty_term ctxt ctrm
 
   fun pretty_cterms ctxt ctrms =
     Pretty.block (Pretty.commas (map (pretty_cterm ctxt) ctrms))

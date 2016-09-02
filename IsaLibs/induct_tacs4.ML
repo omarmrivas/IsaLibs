@@ -23,9 +23,6 @@ structure DB_InductiveTacs4
 = struct
 
 local
-  (* Remove cases data *)
-  fun REMOVE_CASES tac st = Seq.map snd (tac st)
-
   (* Finds all applications of consts in prop *)
   (* useful when we have induction schemes over these consts *)
   fun applications2 thy ok_vars prop =
@@ -76,9 +73,9 @@ fun choose_induct_tac set ctxt (goal,i) =
       (* tactic: "induct"                                            *)
       fun meta_induct_strategy vars_induction = 
           (no_tac,vars_induction)
-            |> Library.foldl (fn (thms,(vs,th)) => (REMOVE_CASES (Induct.induct_tac ctxt true 
+            |> Library.foldl (fn (thms,(vs,th)) => (Induct.induct_tac ctxt true 
                                                                                     [map (fn v => SOME (NONE,(Free v,true))) vs] 
-                                                                                    [] [] (SOME [th]) [] i))
+                                                                                    [] [] (SOME [th]) [] i)
                                                      APPEND
                                                      thms)
       (* Strategy 3:                                                 *)
@@ -92,7 +89,7 @@ fun choose_induct_tac set ctxt (goal,i) =
              |> map_index (fn (i,x) => (x,fix_vs @ List.take (rec_vs,i) @ List.drop (rec_vs,i+1)))
              |> maps (fn (v,fixes) => Utils.subsets fixes |> map (fn s => (v,s)))
              |> (fn args => Library.foldl (fn (thms,(v,fixes)) => 
-                                              ((REMOVE_CASES (Induct.induct_tac ctxt false [[SOME (NONE,(v,false))]] [fixes] [] NONE [] i)) 
+                                              ((Induct.induct_tac ctxt false [[SOME (NONE,(v,false))]] [fixes] [] NONE [] i)
                                                  APPEND
                                                  thms)) (no_tac,args))
       val thy = Proof_Context.theory_of ctxt

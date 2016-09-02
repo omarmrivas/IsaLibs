@@ -26,8 +26,8 @@ fun mk_subst vars trms =
        |> (fn r => ([], r))
 
 fun prepare ctxt scheme simps ((typs, terms) : subst) =
-  (map (apply2 (Thm.ctyp_of ctxt)) typs,
-   map (apply2 (Thm.cterm_of ctxt)) terms)
+  (map (fn (ty, ty') => (dest_TVar ty, Thm.ctyp_of ctxt ty')) typs,
+   map (fn (t, t') => (dest_Var t, Thm.cterm_of ctxt t')) terms)
     |> (fn csubst => Drule.instantiate_normalize csubst scheme)
     |> Proof_Tools.normalise_thm ctxt simps
     |> snd o Logic.dest_equals o Thm.full_prop_of

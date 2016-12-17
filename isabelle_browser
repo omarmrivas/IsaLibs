@@ -10,7 +10,7 @@ ROOTFILE=experiments/$LOGIC/ROOT
 # creating the theory directory and isabelle make files
 
 echo "Creating $LOGIC directory..."
-mkdir experiments/$LOGIC
+mkdir -p experiments/$LOGIC
 
 echo "Creating $LOGIC/ROOT..."
 echo "session \"$LOGIC\" = \"$TARGET\" +" > $ROOTFILE

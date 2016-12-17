@@ -16,6 +16,8 @@ sig
   val create_log         : Path.T -> unit
   val html_table         : string -> string list list -> string
   val write_to_file      : string -> string -> unit
+  val extract_filename   : string -> string
+  val extract_filename'   : string -> string
 
   (* Discrete mathematics *)
   val subsets            : 'a list -> 'a list list
@@ -101,6 +103,7 @@ sig
   val foldl_seq          : ('a * 'b -> 'a) -> 'a * 'b Seq.seq -> 'a
   val weighted_choose    : ('a * int) list -> 'a
   val repeat_until       : ('a -> bool) -> ('b -> 'a) -> 'b -> 'a
+  val trim               : string -> string
 end
 
 structure DB_Utils
@@ -367,6 +370,22 @@ fun write_to_file filename str =
                 then ()
                 else create_log path
     in File.write path str end
+
+fun extract_filename str =
+    (str |> String.explode
+        |> rev
+        |> find_index (fn c => c = #"/")
+        |> (fn i => String.extract (str, String.size str - i, NONE)))
+        handle Subscript => (tracing ("Error extracting filename: " ^ str); str)
+
+fun extract_filename' str =
+  let val str = extract_filename str
+  in
+    (str |> String.explode
+        |> find_index (fn c => c = #".")
+        |> (fn i => String.extract (str, 0, SOME i)))
+        handle Subscript => (tracing ("Error extracting filename: " ^ str); str)
+  end
 
 fun unique_names t =
   let fun unique names (Abs (v, T, t)) =
@@ -884,6 +903,17 @@ end
        then v
        else repeat_until prop f x
     end
+
+fun trim str =
+    if can (unsuffix " ") str
+    then (let val u = unsuffix " " str
+          in if can (unprefix " ") u
+             then trim (unprefix " " u)
+             else trim u
+          end)
+    else (if can (unprefix " ") str
+         then trim (unprefix " " str)
+         else str)
 
 fun numeral_of_int ctxt i =
   Syntax.read_term ctxt (string_of_int i ^ "::int")

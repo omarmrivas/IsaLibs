@@ -9,8 +9,8 @@ ML_file "$ISABELLE_HOME/src/HOL/TPTP/sledgehammer_tactics.ML"
 ML_file "html.ML"
 ML_file "const_names.ML"
 ML_file "tables.ML"
-ML_file "smt.ML"
 ML_file "utils.ML"
+ML_file "smt.ML"
 ML_file "latex.ML"
 ML_file "orders.ML"
 ML_file "sat_interface.ML"
@@ -30,7 +30,23 @@ ML_file "meta_gp_hol.ML"
 ML_file "exhaust.ML"
 ML_file "gnuplot.ML"
 ML_file "mysql.ML"
+ML_file "papers/ml_database.ML"
 ML_file "papers/ESWA2016.ML"
+ML_file "$ISABELLE_HOME/src/Tools/Spec_Check/base_generator.ML"
+ML_file "$ISABELLE_HOME/src/Tools/Spec_Check/generator.ML"
+
+lemma "\<not>(x = {}) \<Longrightarrow> P (x::int set)"
+
+ML {*
+  val g = Generator.term 5
+  val gg = g 2.5
+*}
+
+ML {*
+  val t = @{term "\<not>((\<forall>x. \<not>(P x))\<or>(\<forall>x. Q x))"}
+  val fig = Latex_Utils.latex_tree_with_pos 0.8 3.0 t
+  val _ = Utils.write_to_file "latex.txt" fig
+*}
 
 (*lemma eval_Suc_nat [code_post]:
    "Suc 0 = 1"
@@ -98,19 +114,92 @@ ML {*
   val _ = Future.ML_statistics := false
 *}
 
-ML {*
-  structure K = Variable
-*}
+(*ML {*
+  val smt2_dir = "/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks"
+  val destiny = "experiments/inductive_proofs2"
+(*  val smt2_files = smt2_dir |> SMT_Converter.get_smt2_files destiny
+                            |> filter (fn "" => false
+                                      | _ => true)*)
+  val smt2_files = ["/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_BubSortIsSort.smt2"]
+  val names = SMT_Converter.smt2bash_to_isabelle @{context} destiny "IsaLibs" "by induct_auto" smt2_files
+*}*)
 
-ML {*
-  val g = DB_SMT_Converter.s_expressions @{context} "(declare-datatypes (a) ((list (nil) (cons (head a) (tail (list a)))))) (declare-datatypes () ((Nat (Z) (S (p Nat))))) (define-fun-rec  last    ((x (list Nat))) Nat    (match x      (case nil Z)      (case (cons y z)        (match z          (case nil y)          (case (cons x2 x3) (last z))))))"
-  val s = length g
-  val e1 = hd g
-  val e2 = (hd o tl) g
-  val str1 = SMTLIB.str_of e1
-  val datatype_decl1 = DB_SMT_Converter.translate_datatype e1
-  val str2 = SMTLIB.str_of e2
-  val datatype_decl2 = DB_SMT_Converter.translate_datatype e2
-*}
+(*ML {*.
+  map (fn (smt2, (foo, thy)) => if foo then () else tracing (smt2 ^ " - " ^ thy ^ ".thy")) names
+*}*)
+
+(*
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/list_Interleave.smt2 - list_Interleave.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/list_weird_concat_map_bind.smt2 - list_weird_concat_map_bind.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/list_weird_is_normal.smt2 - list_weird_is_normal.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/mccarthy91_M1.smt2 - mccarthy91_M1.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/mccarthy91_M2.smt2 - mccarthy91_M2.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/mod_same.smt2 - mod_same.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/polyrec_seq_index.smt2 - polyrec_seq_index.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/propositional_AndCommutative.smt2 - propositional_AndCommutative.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/propositional_AndIdempotent.smt2 - propositional_AndIdempotent.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/propositional_AndImplication.smt2 - propositional_AndImplication.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/propositional_Okay.smt2 - propositional_Okay.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/propositional_Sound.smt2 - propositional_Sound.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/rotate_mod.smt2 - rotate_mod.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_BSortCount.smt2 - sort_BSortCount.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_BSortIsSort.smt2 - sort_BSortIsSort.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_BSortPermutes.smt2 - sort_BSortPermutes.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_BSortSorts.smt2 - sort_BSortSorts.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_BubSortCount.smt2 - sort_BubSortCount.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_BubSortIsSort.smt2 - sort_BubSortIsSort.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_BubSortPermutes.smt2 - sort_BubSortPermutes.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_BubSortSorts.smt2 - sort_BubSortSorts.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_HSortCount.smt2 - sort_HSortCount.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_HSortIsSort.smt2 - sort_HSortIsSort.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_HSortPermutes.smt2 - sort_HSortPermutes.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_HSortSorts.smt2 - sort_HSortSorts.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_MSortBU2Count.smt2 - sort_MSortBU2Count.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_MSortBU2IsSort.smt2 - sort_MSortBU2IsSort.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_MSortBU2Permutes.smt2 - sort_MSortBU2Permutes.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_MSortBU2Sorts.smt2 - sort_MSortBU2Sorts.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_MSortBUCount.smt2 - sort_MSortBUCount.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_MSortBUIsSort.smt2 - sort_MSortBUIsSort.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_MSortBUPermutes.smt2 - sort_MSortBUPermutes.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_MSortBUSorts.smt2 - sort_MSortBUSorts.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_MSortTDCount.smt2 - sort_MSortTDCount.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_MSortTDIsSort.smt2 - sort_MSortTDIsSort.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_MSortTDPermutes.smt2 - sort_MSortTDPermutes.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_MSortTDSorts.smt2 - sort_MSortTDSorts.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_NMSortTDCount.smt2 - sort_NMSortTDCount.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_NMSortTDIsSort.smt2 - sort_NMSortTDIsSort.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_NMSortTDPermutes.smt2 - sort_NMSortTDPermutes.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_NMSortTDSorts.smt2 - sort_NMSortTDSorts.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_NStoogeSort2Count.smt2 - sort_NStoogeSort2Count.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_NStoogeSort2IsSort.smt2 - sort_NStoogeSort2IsSort.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_NStoogeSort2Permutes.smt2 - sort_NStoogeSort2Permutes.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_NStoogeSort2Sorts.smt2 - sort_NStoogeSort2Sorts.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_NStoogeSortCount.smt2 - sort_NStoogeSortCount.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_NStoogeSortIsSort.smt2 - sort_NStoogeSortIsSort.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_NStoogeSortPermutes.smt2 - sort_NStoogeSortPermutes.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_NStoogeSortSorts.smt2 - sort_NStoogeSortSorts.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_QSortCount.smt2 - sort_QSortCount.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_QSortIsSort.smt2 - sort_QSortIsSort.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_QSortPermutes.smt2 - sort_QSortPermutes.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_QSortSorts.smt2 - sort_QSortSorts.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_SSortCount.smt2 - sort_SSortCount.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_SSortIsSort.smt2 - sort_SSortIsSort.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_SSortPermutes.smt2 - sort_SSortPermutes.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_SSortSorts.smt2 - sort_SSortSorts.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_StoogeSort2Count.smt2 - sort_StoogeSort2Count.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_StoogeSort2IsSort.smt2 - sort_StoogeSort2IsSort.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_StoogeSort2Permutes.smt2 - sort_StoogeSort2Permutes.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_StoogeSort2Sorts.smt2 - sort_StoogeSort2Sorts.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_StoogeSortCount.smt2 - sort_StoogeSortCount.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_StoogeSortIsSort.smt2 - sort_StoogeSortIsSort.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_StoogeSortPermutes.smt2 - sort_StoogeSortPermutes.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_StoogeSortSorts.smt2 - sort_StoogeSortSorts.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/subst_SubstFreeNo.smt2 - subst_SubstFreeNo.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/subst_SubstFreeYes.smt2 - subst_SubstFreeYes.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/tree_Flatten1.smt2 - tree_Flatten1.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/tree_Flatten1List.smt2 - tree_Flatten1List.thy 
+/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/tree_Flatten3.smt2 - tree_Flatten3.thy 
+val it = [(), (), (), (), (), (), (), (), (), (), ...]: unit list
+*)
 
 end

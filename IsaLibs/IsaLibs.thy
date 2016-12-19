@@ -35,11 +35,13 @@ ML_file "papers/ESWA2016.ML"
 ML_file "$ISABELLE_HOME/src/Tools/Spec_Check/base_generator.ML"
 ML_file "$ISABELLE_HOME/src/Tools/Spec_Check/generator.ML"
 
-lemma "\<not>(x = {}) \<Longrightarrow> P (x::int set)"
+ML {*
+  val l = DB_Counter_Example.quickcheck_terms @{context} 600 500 @{typ "real"}
+  val s = length l
+*}
 
 ML {*
-  val g = Generator.term 5
-  val gg = g 2.5
+  map (tracing o Syntax.string_of_term @{context}) l
 *}
 
 ML {*

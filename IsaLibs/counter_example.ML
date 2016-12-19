@@ -125,6 +125,14 @@ fun quickcheck timeOut state =
        | NONE => (false, state))
     else (false, state)
 
+fun quickcheck_term timeOut state =
+    if Config.get (Proof.context_of state) use_quickcheck
+    then
+      (case Quickcheck.quickcheck [("timeout",[Int.toString timeOut])] 1 state of
+         SOME (_,r) => SOME r
+       | NONE => NONE)
+    else NONE
+
 fun quickcheck_model timeOut state =
     Quickcheck.quickcheck [("timeout",[Int.toString timeOut])] 1 state
 
@@ -148,6 +156,33 @@ fun quickcheck_nitpick_raw ctxt timeOut conjecture =
                                |> (fn (foo,_) => (foo, state)))
          |> (fn (foo,state) => 
                 foo orelse (Utils.safe_eval "counter_example.ML 172" false (nitpick timeOut) state))
+
+fun quickcheck_term_raw ctxt timeOut conjecture =
+    ctxt |> Proof.theorem NONE (K I) [[(conjecture, [])]]
+         |> (fn state => state |> Utils.safe_eval "counter_example 154" NONE (quickcheck_term timeOut))
+         |> (fn SOME l => get_first (fn (name, t) => if name = "x"
+                                                     then SOME t
+                                                     else NONE) l
+              | _ => NONE)
+
+fun quickcheck_terms ctxt timeOut n typ =
+  let val concl = HOLogic.mk_Trueprop (Free ("P", typ --> @{typ "bool"}) $ Free ("x", typ))
+      fun neg t = HOLogic.mk_not (HOLogic.mk_eq (Free ("x", typ), t))
+                    |> HOLogic.mk_Trueprop
+      fun mk_conjecture tab = 
+          tab |> Term_Tab.keys
+              |> map neg
+              |> rpair concl
+              |> Logic.list_implies
+      fun terms 0 tab = Term_Tab.keys tab
+        | terms n tab = 
+        let val _ = tracing (string_of_int n)
+        in
+        case quickcheck_term_raw ctxt timeOut (mk_conjecture tab) of
+          SOME t => terms (n-1) (Term_Tab.update (t, ()) tab)
+          | NONE => Term_Tab.keys tab end
+  in terms n Term_Tab.empty end
+  
 
 fun counter_example _ _ (_ $ Const ("HOL.True",_)) = false
   | counter_example ctxt timeOut conjecture = quickcheck_nitpick_raw ctxt timeOut conjecture

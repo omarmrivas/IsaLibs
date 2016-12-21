@@ -4,7 +4,7 @@ begin
 
 section {* RCN *}
 
-declare [[max_time_in_fitness = 1200]]
+declare [[max_time_in_fitness = 60]]
 
 text {* This theory file shows how to find a function that adds the elements of a list of natural 
 numbers in Isabelle/HOL. *}
@@ -68,7 +68,7 @@ definition scheme where
 "scheme P \<equiv> \<exists>w1 w2 w3 f.
             \<forall>(n::nat) (v1::vect) (v2::vect) (v3::vect) (v::vect).
   ((w1 P 0 v1 v2 v3 = [v1]) \<and>
-   (w1 P (Suc n) v1 v2 v3 = (let (L::vect list) = w2 P n v1 v2 v3 in
+   (w1 P (Suc n) v1 v2 v3 = (let (L::vect list) = w3 P n v1 v2 v3 in
                            let (X::vect) = P (nat_to_real (Suc n)) v1 v2 v3
                                        proyx
                                        proyy
@@ -84,7 +84,7 @@ definition scheme where
                            in X # L)) \<and>
    (w2 P 0 v1 v2 v3 = [v1]) \<and>
    (w2 P (Suc 0) v1 v2 v3 = [v1, v2]) \<and>
-   (w2 P (Suc (Suc n)) v1 v2 v3 = (let (L::vect list) = w3 P (Suc n) v1 v2 v3 in
+   (w2 P (Suc (Suc n)) v1 v2 v3 = (let (L::vect list) = w1 P (Suc n) v1 v2 v3 in
                            let (X::vect) = P (nat_to_real (Suc (Suc n))) v1 v2 v3
                                        proyx
                                        proyy
@@ -101,7 +101,7 @@ definition scheme where
    (w3 P 0 v1 v2 v3 = [v1]) \<and>
    (w3 P (Suc 0) v1 v2 v3 = [v1, v2]) \<and>
    (w3 P (Suc (Suc 0)) v1 v2 v3 = [v1, v2, v3]) \<and>
-   (w3 P (Suc (Suc (Suc n))) v1 v2 v3 = (let (L::vect list) = w1 P (Suc (Suc n)) v1 v2 v3 in
+   (w3 P (Suc (Suc (Suc n))) v1 v2 v3 = (let (L::vect list) = w2 P (Suc (Suc n)) v1 v2 v3 in
                            let (X::vect) = P (nat_to_real (Suc (Suc (Suc n)))) v1 v2 v3
                                        proyx
                                        proyy
@@ -124,7 +124,7 @@ definition scheme where
 
 function w1 and w2 and w3 and f where
 "w1 P 0 v1 v2 v3 = [v1]" |
-"w1 P (Suc n) v1 v2 v3 = (let (L::vect list) = w2 P n v1 v2 v3 in
+"w1 P (Suc n) v1 v2 v3 = (let (L::vect list) = w3 P n v1 v2 v3 in
                         let (X::vect) = P (nat_to_real (Suc n)) v1 v2 v3
                                        proyx
                                        proyy
@@ -140,7 +140,7 @@ function w1 and w2 and w3 and f where
                            in X # L)" |
 "w2 P 0 v1 v2 v3 = [v1]" |
 "w2 P (Suc 0) v1 v2 v3 = [v1, v2]" |
-"w2 P (Suc (Suc n)) v1 v2 v3 = (let (L::vect list) = w3 P (Suc n) v1 v2 v3 in
+"w2 P (Suc (Suc n)) v1 v2 v3 = (let (L::vect list) = w1 P (Suc n) v1 v2 v3 in
                         let (X::vect) = P (nat_to_real (Suc (Suc n))) v1 v2 v3
                                        proyx
                                        proyy
@@ -157,7 +157,7 @@ function w1 and w2 and w3 and f where
 "w3 P 0 v1 v2 v3 = [v1]" |
 "w3 P (Suc 0) v1 v2 v3 = [v1, v2]" |
 "w3 P (Suc (Suc 0)) v1 v2 v3 = [v1, v2, v3]" |
-"w3 P (Suc (Suc (Suc n))) v1 v2 v3 = (let (L::vect list) = w1 P (Suc (Suc n)) v1 v2 v3 in
+"w3 P (Suc (Suc (Suc n))) v1 v2 v3 = (let (L::vect list) = w2 P (Suc (Suc n)) v1 v2 v3 in
                         let (X::vect) = P (nat_to_real (Suc (Suc (Suc n)))) v1 v2 v3
                                        proyx
                                        proyy
@@ -223,9 +223,9 @@ ML {*
   val data = [(@{term "5::nat"}, 3),
               (@{term "8::nat"}, 36),
               (@{term "11::nat"}, 153),
-              (@{term "14::nat"}, 447),
+              (@{term "14::nat"}, 447)(*,
               (@{term "17::nat"}, 1029),
-              (@{term "20::nat"}, 2055)]
+              (@{term "20::nat"}, 2055)*)]
   val v1 = @{term "(1,1,1)::vect"}
   val v2 = @{term "(-1,1,-1)::vect"}
   val v3 = @{term "(1,-1,1)::vect"}
@@ -251,7 +251,6 @@ ML {*
                                             in d * d end) data
                  |> pair 0
                  |> Library.foldl (fn (s, e) => s + e)
-                 |> tap (tracing o string_of_int)
                  |> Rat.rat_of_int
     in error end
     | fitness _ _ = raise ERROR "Error in fitness"
@@ -262,7 +261,7 @@ ML {*
       consts |> fitness ctxt
              |> (fn r => Rat.lt r (Rat.rat_of_int 1880))
   val term_size = 27
-  val max_term_size = 40
+  val max_term_size = 30
   val population_size = 500
   val generations = 500
   val bests = 10
@@ -276,11 +275,19 @@ ML {*
 
 text {* We finally call the Evolve algorithm. *}
 
+(*value "f (\<lambda>x xa xb xc xd xe xf xg xh xi xj xk xl xm xn. xh xb (xj (xm xn) xc)) 15 (1,1,1) (-1,1,-1) (1,-1,1)"
+
+lemma "w1 (\<lambda>x xa xb xc xd xe xf xg xh xi xj xk xl xm xn. xh xb (xj (xm xn) xc)) (Suc n) v1 v2 v3 = X"
+apply simp
+
+lemma "f (\<lambda>x xa xb xc xd xe xf xg xh xi xj xk xl xm xn. xh xb (xj (xm xn) xc)) n v1 v2 v3 = X"
+apply simp*)
+
 ML {*
-  val w1 = @{term "w1 (\<lambda>x xa xb xc xd xe xf xg xh xi xj xk xl xm xn. xi xb (xl xb xc))"}
-  val w2 = @{term "w2 (\<lambda>x xa xb xc xd xe xf xg xh xi xj xk xl xm xn. xi xb (xl xb xc))"}
-  val w3 = @{term "w3 (\<lambda>x xa xb xc xd xe xf xg xh xi xj xk xl xm xn. xi xb (xl xb xc))"}
-  val f = @{term "f (\<lambda>x xa xb xc xd xe xf xg xh xi xj xk xl xm xn. xi xb (xl xb xc))"}
+  val w1 = @{term "w1 (\<lambda>x xa xb xc xd xe xf xg xh xi xj xk xl xm xn. xh xb (xj (xm xn) xc))"}
+  val w2 = @{term "w2 (\<lambda>x xa xb xc xd xe xf xg xh xi xj xk xl xm xn. xh xb (xj (xm xn) xc))"}
+  val w3 = @{term "w3 (\<lambda>x xa xb xc xd xe xf xg xh xi xj xk xl xm xn. xh xb (xj (xm xn) xc))"}
+  val f = @{term "f (\<lambda>x xa xb xc xd xe xf xg xh xi xj xk xl xm xn. xh xb (xj (xm xn) xc))"}
   val ff = fitness ctxt [w1, w2, w3, f]
 *}
 

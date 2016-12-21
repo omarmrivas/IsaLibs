@@ -82,6 +82,9 @@ sig
   (* Others *)
   val rat_to_float       : Rat.rat -> real
   val int_of_numeral     : term -> int
+  val rat_of_numeral     : term -> Rat.rat
+  val elements_of_list   : term -> term list
+  val elements_of_product_type   : term -> term list
   val numeral_of_int     : Proof.context -> int -> term
   val numeral_of_nat     : Proof.context -> int -> term
   val minby              : ('a * 'a -> order) -> ('b -> 'a) -> 'b list -> 'b
@@ -943,6 +946,50 @@ fun numeral_of_nat ctxt i =
                          |> read_int))
     | _ => (tracing (Syntax.string_of_term @{context} t); raise ERROR "Malformed numeral!")
   end
+
+  fun factor_of_numeral (t as (Const (pc, _) $ n) $ m) =
+    if pc = Const_Names.power_class
+    then
+    let val n = int_of_numeral n
+        val m = int_of_numeral m
+    in Library.foldl (fn (r, _) => r * n) (1, 1 upto m) end
+    else int_of_numeral t
+    | factor_of_numeral t = int_of_numeral t
+
+  fun rat_of_numeral t =
+  let
+    val s = string_of_term @{context} t
+    val ss = space_explode " " s
+  in case ss of
+      [s] => s |> (map Char.toString) o String.explode
+               |> read_int
+               |> fst
+               |> Rat.rat_of_int
+    | [_, s] => (s |> (map Char.toString) o String.explode
+                   |> read_int
+                   |> fst
+                   |> (fn x => ~ x)
+                   |> Rat.rat_of_int)
+    | _ => (case t of
+            (_ $ p $ q) => Rat.rat_of_quotient (int_of_numeral p, factor_of_numeral q)
+          | _ => (tracing (Syntax.string_of_term @{context} t); raise ERROR "Malformed numeral!"))
+  end
+
+  fun elements_of_list (w as (Const (c, _) $ e $ t)) =
+    if c = Const_Names.list_cons
+    then e :: elements_of_list t
+    else (tracing (Syntax.string_of_term @{context} w); raise ERROR "Malformed list!")
+    | elements_of_list (w as (Const (n, _))) =
+      if n = Const_Names.list_nil
+      then []
+      else (tracing (Syntax.string_of_term @{context} w); raise ERROR "Malformed list!")
+    | elements_of_list t = (tracing (Syntax.string_of_term @{context} t); raise ERROR "Malformed list!")
+
+  fun elements_of_product_type (w as (Const (c, _) $ e $ t)) =
+    if c = Const_Names.product_type
+    then e :: elements_of_product_type t
+    else (tracing (Syntax.string_of_term @{context} w); raise ERROR "Malformed list!")
+    | elements_of_product_type w = [w]
 
 (*  fun int_of_numeral t =
     let fun sign (Const (m, ty) $ t) = if m = Const_Names.Minus

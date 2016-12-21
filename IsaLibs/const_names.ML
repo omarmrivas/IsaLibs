@@ -31,6 +31,11 @@ sig
   val Zero_class                       : string
   val Minus                            : string
   val Numeral                          : string
+  val divide_class                     : string
+  val power_class                      : string
+  val list_nil                         : string
+  val list_cons                        : string
+  val product_type                     : string
 
   val undefined_name                   : string
 
@@ -60,6 +65,13 @@ val Const (One_class, _) = @{term "1::int"}
 val Const (Zero_class, _) = @{term "0::int"}
 val Const (Minus, _) $ _ = @{term "-1::int"}
 val Const (Numeral, _) $ _ = @{term "2::int"}
+
+val Const (list_cons, _) = @{term "op #"}
+val Const (list_nil, _) = @{term "[]"}
+val Const (product_type, _) $ _ $ _ = @{term "(x,y)"}
+
+
+val Const (divide_class, _) $ _ $ ((Const (power_class, _) $ _) $ _) = @{term "4.723 :: real"}
 
 (* SAT *)
 val Const (hol_less, _) = @{term "Orderings.ord_class.less"}

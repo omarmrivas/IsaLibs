@@ -169,11 +169,13 @@ fun quickcheck_terms ctxt timeOut n typ =
   let val concl = HOLogic.mk_Trueprop (Free ("P", typ --> @{typ "bool"}) $ Free ("x", typ))
       fun neg t = HOLogic.mk_not (HOLogic.mk_eq (Free ("x", typ), t))
                     |> HOLogic.mk_Trueprop
-      fun mk_conjecture tab = 
+      val fix = HOLogic.mk_Trueprop o HOLogic.dest_not o HOLogic.dest_Trueprop
+      fun mk_conjecture tab =
           tab |> Term_Tab.keys
               |> map neg
-              |> rpair concl
-              |> Logic.list_implies
+              |> (fn [] => concl
+                  | h :: tl => Logic.list_implies (tl, fix h))
+              |> tap (tracing o Syntax.string_of_term ctxt)
       fun terms 0 tab = Term_Tab.keys tab
         | terms n tab = 
         let val _ = tracing (string_of_int n)

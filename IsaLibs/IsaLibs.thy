@@ -32,10 +32,12 @@ ML_file "gnuplot.ML"
 ML_file "mysql.ML"
 ML_file "papers/ml_database.ML"
 ML_file "papers/ESWA2016.ML"
-ML_file "$ISABELLE_HOME/src/Tools/Spec_Check/base_generator.ML"
-ML_file "$ISABELLE_HOME/src/Tools/Spec_Check/generator.ML"
+ML_file "papers/rectilinear_crossing.ML"
 
-ML {*
+(*ML_file "$ISABELLE_HOME/src/Tools/Spec_Check/base_generator.ML"
+ML_file "$ISABELLE_HOME/src/Tools/Spec_Check/generator.ML"*)
+
+(*ML {*
   val l = DB_Counter_Example.quickcheck_terms @{context} 600 500 @{typ "real"}
   val s = length l
 *}
@@ -44,11 +46,14 @@ ML {*
   map (tracing o Syntax.string_of_term @{context}) l
 *}
 
+lemma "\<not>(x=real_of_rat (Fract 0 1)) \<Longrightarrow> (x::real) = real_of_rat (Fract (- 1) 1)"
+
+
 ML {*
   val t = @{term "\<not>((\<forall>x. \<not>(P x))\<or>(\<forall>x. Q x))"}
   val fig = Latex_Utils.latex_tree_with_pos 0.8 3.0 t
   val _ = Utils.write_to_file "latex.txt" fig
-*}
+*}*)
 
 (*lemma eval_Suc_nat [code_post]:
    "Suc 0 = 1"

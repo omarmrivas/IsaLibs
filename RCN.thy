@@ -4,7 +4,7 @@ begin
 
 section {* RCN *}
 
-declare [[max_time_in_fitness = 60]]
+declare [[max_time_in_fitness = 120]]
 
 text {* This theory file shows how to find a function that adds the elements of a list of natural 
 numbers in Isabelle/HOL. *}
@@ -65,10 +65,10 @@ fun nat_to_real where
 "nat_to_real (Suc n) = 1 + nat_to_real n"
 
 definition scheme where
-"scheme P \<equiv> \<exists>w1 w2 w3 f.
+"scheme P Q R \<equiv> \<exists>w1 w2 w3 f.
             \<forall>(n::nat) (v1::vect) (v2::vect) (v3::vect) (v::vect).
-  ((w1 P 0 v1 v2 v3 = [v1]) \<and>
-   (w1 P (Suc n) v1 v2 v3 = (let (L::vect list) = w3 P n v1 v2 v3 in
+  ((w1 P Q R 0 v1 v2 v3 = [v1]) \<and>
+   (w1 P Q R (Suc n) v1 v2 v3 = (let (L::vect list) = w3 P Q R n v1 v2 v3 in
                            let (X::vect) = P (nat_to_real (Suc n)) v1 v2 v3
                                        proyx
                                        proyy
@@ -82,10 +82,10 @@ definition scheme where
                                        vmag
                                        (hd L)
                            in X # L)) \<and>
-   (w2 P 0 v1 v2 v3 = [v1]) \<and>
-   (w2 P (Suc 0) v1 v2 v3 = [v1, v2]) \<and>
-   (w2 P (Suc (Suc n)) v1 v2 v3 = (let (L::vect list) = w1 P (Suc n) v1 v2 v3 in
-                           let (X::vect) = P (nat_to_real (Suc (Suc n))) v1 v2 v3
+   (w2 P Q R 0 v1 v2 v3 = [v1]) \<and>
+   (w2 P Q R (Suc 0) v1 v2 v3 = [v1, v2]) \<and>
+   (w2 P Q R (Suc (Suc n)) v1 v2 v3 = (let (L::vect list) = w1 P Q R (Suc n) v1 v2 v3 in
+                           let (X::vect) = Q (nat_to_real (Suc (Suc n))) v1 v2 v3
                                        proyx
                                        proyy
                                        proyz
@@ -98,11 +98,11 @@ definition scheme where
                                        vmag
                                        (hd L)
                            in X # L)) \<and>
-   (w3 P 0 v1 v2 v3 = [v1]) \<and>
-   (w3 P (Suc 0) v1 v2 v3 = [v1, v2]) \<and>
-   (w3 P (Suc (Suc 0)) v1 v2 v3 = [v1, v2, v3]) \<and>
-   (w3 P (Suc (Suc (Suc n))) v1 v2 v3 = (let (L::vect list) = w2 P (Suc (Suc n)) v1 v2 v3 in
-                           let (X::vect) = P (nat_to_real (Suc (Suc (Suc n)))) v1 v2 v3
+   (w3 P Q R 0 v1 v2 v3 = [v1]) \<and>
+   (w3 P Q R (Suc 0) v1 v2 v3 = [v1, v2]) \<and>
+   (w3 P Q R (Suc (Suc 0)) v1 v2 v3 = [v1, v2, v3]) \<and>
+   (w3 P Q R (Suc (Suc (Suc n))) v1 v2 v3 = (let (L::vect list) = w2 P Q R (Suc (Suc n)) v1 v2 v3 in
+                           let (X::vect) = R (nat_to_real (Suc (Suc (Suc n)))) v1 v2 v3
                                        proyx
                                        proyy
                                        proyz
@@ -115,16 +115,16 @@ definition scheme where
                                        vmag
                                        (hd L)
                            in X # L)) \<and>
-   (f P n v1 v2 v3 = (let r = n mod 3 in
+   (f P Q R n v1 v2 v3 = (let r = n mod 3 in
                     if r = 0
-                    then w1 P n v1 v2 v3
+                    then w1 P Q R n v1 v2 v3
                     else if r = 1
-                    then w2 P n v1 v2 v3
-                    else w3 P n v1 v2 v3)))"
+                    then w2 P Q R n v1 v2 v3
+                    else w3 P Q R n v1 v2 v3)))"
 
 function w1 and w2 and w3 and f where
-"w1 P 0 v1 v2 v3 = [v1]" |
-"w1 P (Suc n) v1 v2 v3 = (let (L::vect list) = w3 P n v1 v2 v3 in
+"w1 P Q R 0 v1 v2 v3 = [v1]" |
+"w1 P Q R (Suc n) v1 v2 v3 = (let (L::vect list) = w3 P Q R n v1 v2 v3 in
                         let (X::vect) = P (nat_to_real (Suc n)) v1 v2 v3
                                        proyx
                                        proyy
@@ -138,10 +138,10 @@ function w1 and w2 and w3 and f where
                                        vmag
                                        (hd L)
                            in X # L)" |
-"w2 P 0 v1 v2 v3 = [v1]" |
-"w2 P (Suc 0) v1 v2 v3 = [v1, v2]" |
-"w2 P (Suc (Suc n)) v1 v2 v3 = (let (L::vect list) = w1 P (Suc n) v1 v2 v3 in
-                        let (X::vect) = P (nat_to_real (Suc (Suc n))) v1 v2 v3
+"w2 P Q R 0 v1 v2 v3 = [v1]" |
+"w2 P Q R (Suc 0) v1 v2 v3 = [v1, v2]" |
+"w2 P Q R (Suc (Suc n)) v1 v2 v3 = (let (L::vect list) = w1 P Q R (Suc n) v1 v2 v3 in
+                        let (X::vect) = Q (nat_to_real (Suc (Suc n))) v1 v2 v3
                                        proyx
                                        proyy
                                        proyz
@@ -154,11 +154,11 @@ function w1 and w2 and w3 and f where
                                        vmag
                                        (hd L)
                            in X # L)" |
-"w3 P 0 v1 v2 v3 = [v1]" |
-"w3 P (Suc 0) v1 v2 v3 = [v1, v2]" |
-"w3 P (Suc (Suc 0)) v1 v2 v3 = [v1, v2, v3]" |
-"w3 P (Suc (Suc (Suc n))) v1 v2 v3 = (let (L::vect list) = w2 P (Suc (Suc n)) v1 v2 v3 in
-                        let (X::vect) = P (nat_to_real (Suc (Suc (Suc n)))) v1 v2 v3
+"w3 P Q R 0 v1 v2 v3 = [v1]" |
+"w3 P Q R (Suc 0) v1 v2 v3 = [v1, v2]" |
+"w3 P Q R (Suc (Suc 0)) v1 v2 v3 = [v1, v2, v3]" |
+"w3 P Q R (Suc (Suc (Suc n))) v1 v2 v3 = (let (L::vect list) = w2 P Q R (Suc (Suc n)) v1 v2 v3 in
+                        let (X::vect) = R (nat_to_real (Suc (Suc (Suc n)))) v1 v2 v3
                                        proyx
                                        proyy
                                        proyz
@@ -171,18 +171,18 @@ function w1 and w2 and w3 and f where
                                        vmag
                                        (hd L)
                            in X # L)" |
-"f P n v1 v2 v3 = (let r = n mod 3 in
+"f P Q R n v1 v2 v3 = (let r = n mod 3 in
                     if r = 0
-                    then w1 P n v1 v2 v3
+                    then w1 P Q R n v1 v2 v3
                     else if r = 1
-                    then w2 P n v1 v2 v3
-                    else w3 P n v1 v2 v3)"
+                    then w2 P Q R n v1 v2 v3
+                    else w3 P Q R n v1 v2 v3)"
 by pat_completeness auto
 termination by size_change
 
 text {* Proof. *}
 
-theorem "scheme P"
+theorem "scheme P Q R"
 apply (unfold scheme_def)
 apply (rule_tac x="w1" in exI)
 apply (rule_tac x="w2" in exI)
@@ -228,7 +228,7 @@ ML {*
               (@{term "20::nat"}, 2055)*)]
   val v1 = @{term "(1,1,1)::vect"}
   val v2 = @{term "(-1,1,-1)::vect"}
-  val v3 = @{term "(1,-1,1)::vect"}
+  val v3 = Value.value ctxt (@{term "vcross"} $ v1 $ v2)(*@{term "(1,-1,-1)::vect"}*)
   fun to_rat_vect [x,y,z] = (Utils.rat_of_numeral x, Utils.rat_of_numeral y, Utils.rat_of_numeral z)
     | to_rat_vect _ = raise ERROR "Invalid vect!"
   fun get_crossing_number l = 
@@ -260,8 +260,8 @@ ML {*
   fun test ctxt consts =
       consts |> fitness ctxt
              |> (fn r => Rat.lt r (Rat.rat_of_int 1880))
-  val term_size = 27
-  val max_term_size = 30
+  val term_size = 25
+  val max_term_size = 27
   val population_size = 500
   val generations = 500
   val bests = 10
@@ -283,17 +283,21 @@ apply simp
 lemma "f (\<lambda>x xa xb xc xd xe xf xg xh xi xj xk xl xm xn. xh xb (xj (xm xn) xc)) n v1 v2 v3 = X"
 apply simp*)
 
-ML {*
-  val w1 = @{term "w1 (\<lambda>x xa xb xc xd xe xf xg xh xi xj xk xl xm xn. xh xb (xj (xm xn) xc))"}
-  val w2 = @{term "w2 (\<lambda>x xa xb xc xd xe xf xg xh xi xj xk xl xm xn. xh xb (xj (xm xn) xc))"}
-  val w3 = @{term "w3 (\<lambda>x xa xb xc xd xe xf xg xh xi xj xk xl xm xn. xh xb (xj (xm xn) xc))"}
-  val f = @{term "f (\<lambda>x xa xb xc xd xe xf xg xh xi xj xk xl xm xn. xh xb (xj (xm xn) xc))"}
+(*ML {*.
+  val w1 = @{term "w1 (\<lambda>x xa xb xc xd xe xf xg xh xi xj xk xl xm xn.
+   xj x (xi (xl (xi (xl xc xn) xa) xn) xc))"}
+  val w2 = @{term "w2 (\<lambda>x xa xb xc xd xe xf xg xh xi xj xk xl xm xn.
+   xj x (xi (xl (xi (xl xc xn) xa) xn) xc))"}
+  val w3 = @{term "w3 (\<lambda>x xa xb xc xd xe xf xg xh xi xj xk xl xm xn.
+   xj x (xi (xl (xi (xl xc xn) xa) xn) xc))"}
+  val f = @{term "f (\<lambda>x xa xb xc xd xe xf xg xh xi xj xk xl xm xn.
+   xj x (xi (xl (xi (xl xc xn) xa) xn) xc))"}
   val ff = fitness ctxt [w1, w2, w3, f]
-*}
+*}*)
 
 local_setup {*
  fn lthy =>
-    let val experiment = GP.evolve true true true "RectilinearCrossing.log" scheme functions recursive_calls bad_fitness lthy fitness finish
+    let val experiment = GP.evolve true false false "RectilinearCrossing.log" scheme functions recursive_calls bad_fitness lthy fitness finish
                                    term_size max_term_size population_size generations bests mut_prob
         val _ = MySQL.new_experiment "RectilinearCrossing" generations term_size population_size experiment
     in lthy end

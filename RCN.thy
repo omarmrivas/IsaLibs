@@ -238,13 +238,20 @@ ML {*
     let val xy = map (fn (x,y,_) => (x, y)) l
         val xz = map (fn (x,_,z) => (x, z)) l
         val yz = map (fn (_,y,z) => (y, z)) l
-    in case DB_Rectilinear.construct_graph xy of
+        val l = [xy, xz, yz]
+                      |> map_filter DB_Rectilinear.construct_graph
+                      |> map (fn (DB_Rectilinear.PGraph {crossing_number, ...}) => crossing_number)
+    in case l of
+          [] => 14634570
+        | l => Utils.minby int_ord (fn x => x) l
+    end
+(*    in case DB_Rectilinear.construct_graph xy of
         (SOME (DB_Rectilinear.PGraph {crossing_number, ...})) => crossing_number
       | _ => case DB_Rectilinear.construct_graph xz of
               (SOME (DB_Rectilinear.PGraph {crossing_number, ...})) => crossing_number
             | _ => case DB_Rectilinear.construct_graph yz of
                 (SOME (DB_Rectilinear.PGraph {crossing_number, ...})) => crossing_number
-              | _ => 14634570 end
+              | _ => 14634570 end*)
   fun fitness ctxt [_, _, _, f] =
     let val in_out = data
         val error = 

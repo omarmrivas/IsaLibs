@@ -34,6 +34,11 @@ ML_file "papers/ml_database.ML"
 ML_file "papers/ESWA2016.ML"
 ML_file "papers/rectilinear_crossing.ML"
 
+(*ML {*
+  val r = DB_Random_Terms.random_datatype @{context} 10 @{typ "((nat list) list) list"}
+  val _ = tracing (Syntax.string_of_term @{context} r)
+*}*)
+
 (*ML_file "$ISABELLE_HOME/src/Tools/Spec_Check/base_generator.ML"
 ML_file "$ISABELLE_HOME/src/Tools/Spec_Check/generator.ML"*)
 

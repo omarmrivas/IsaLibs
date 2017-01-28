@@ -226,9 +226,12 @@ ML {*
               (@{term "14::nat"}, 447)(*,
               (@{term "17::nat"}, 1029),
               (@{term "20::nat"}, 2055)*)]
-  val v1 = @{term "(1,1,1)::vect"}
+(*  val v1 = @{term "(1,1,1)::vect"}
   val v2 = @{term "(-1,1,-1)::vect"}
-  val v3 = Value.value ctxt (@{term "vcross"} $ v1 $ v2)(*@{term "(1,-1,-1)::vect"}*)
+  val v3 = Value.value ctxt (@{term "vcross"} $ v1 $ v2)(*@{term "(1,-1,-1)::vect"}*)*)
+  val v1 = @{term "(1,0,0)::vect"}
+  val v2 = @{term "(0,1,0)::vect"}
+  val v3 = @{term "(0,0,1)::vect"}
   fun to_rat_vect [x,y,z] = (Utils.rat_of_numeral x, Utils.rat_of_numeral y, Utils.rat_of_numeral z)
     | to_rat_vect _ = raise ERROR "Invalid vect!"
   fun get_crossing_number l = 
@@ -248,7 +251,7 @@ ML {*
           in_out |> map (fn (n,_) => Value.value ctxt (f $ n $ v1 $ v2 $ v3))
                  |> map (get_crossing_number o (map (to_rat_vect o Utils.elements_of_product_type)) o Utils.elements_of_list)
                  |> map2 (fn (_, x) => fn y => let val d = x - y
-                                            in d * d end) data
+                                            in abs d end) data
                  |> pair 0
                  |> Library.foldl (fn (s, e) => s + e)
                  |> Rat.rat_of_int

@@ -104,6 +104,7 @@ sig
   val memoize_function   : ('a -> 'b -> 'c option) -> ('b * 'c -> 'a -> 'a) ->
                            'a Synchronized.var -> ('b -> 'c) -> 'b -> 'c
   val foldl_seq          : ('a * 'b -> 'a) -> 'a * 'b Seq.seq -> 'a
+  val random             : unit -> real
   val weighted_choose    : ('a * int) list -> 'a
   val repeat_until       : ('a -> bool) -> ('b -> 'a) -> 'b -> 'a
   val trim               : string -> string
@@ -847,6 +848,10 @@ fun foldl_seq (f: 'a * 'b -> 'a) : 'a * 'b Seq.seq -> 'a =
                 SOME (a, seq) => itl (f(e, a), seq)
               | NONE => e
   in itl end
+
+fun random () = 
+  (Random.random () / Random.random ())
+    |> (fn r => if r < 1.0 then r else 1.0 / r)
 
 fun weighted_choose (L : ('a * int) list) =
     let val choosen = L |> map snd

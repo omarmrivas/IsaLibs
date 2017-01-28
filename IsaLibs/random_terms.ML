@@ -12,6 +12,7 @@ sig
   val random_term         : typ -> int -> term option
   val enumerate_terms     : typ -> int -> term list
   val enumerate_all_terms : typ -> int -> term list
+  val random_datatype     : Proof.context -> int -> typ -> term
 end
 
 structure DB_Random_Terms
@@ -296,6 +297,73 @@ fun enumerate_all_terms A s =
     |> maps (enumerate_terms A)
 
 end
+
+  fun constructors_of_type ctxt typ =
+    let val thy = Proof_Context.theory_of ctxt
+    in case typ of
+        Type (name, _) => 
+          (case BNF_LFP_Compat.get_constrs thy name of
+            SOME l => l |> map (strip_type o snd)
+                        |> map (fn (typs, _) => (map (fn _ => dummyT) typs, typ))
+                        |> map2 (fn (n, _) => fn (typs, ty) => Const (n, typs ---> ty)) l
+                        |> map (Syntax.check_term ctxt)
+          | NONE => [])
+      | _ => [] end
+
+  fun random_real ctxt = Random.random () / Random.random ()
+      |> (fn r => if r < 1.0
+                  then r
+                  else 1.0 / r)
+      |> (fn r => r * 2.0 - 1.0)
+      |> (fn i => if i < 0.0 then "-" ^ string_of_real (~i) else string_of_real i)
+      |> (fn str => Syntax.read_term ctxt (str ^ " :: real"))
+  fun random_rat ctxt =  Random.random () / Random.random ()
+      |> (fn r => if r < 1.0
+                  then r
+                  else 1.0 / r)
+      |> (fn r => r * 2.0 - 1.0)
+      |> (fn i => if i < 0.0 then "-" ^ string_of_real (~i) else string_of_real i)
+      |> (fn str => Syntax.read_term ctxt (str ^ " :: rat"))
+  fun random_int ctxt = (Random.random_range 1 200 - 100)
+      |> (fn i => if i < 0 then "-" ^ string_of_int (~i) else string_of_int i)
+      |> (fn str => Syntax.read_term ctxt (str ^ " :: int"))
+  fun random_nat ctxt = (Random.random_range 0 100)
+      |> string_of_int
+      |> (fn str => Syntax.read_term ctxt (str ^ " :: nat"))
+
+  val random_generators = 
+                  Type_Tab.empty
+                      |> Type_Tab.update (@{typ "nat"}, random_nat)
+                      |> Type_Tab.update (@{typ "int"}, random_int)
+                      |> Type_Tab.update (@{typ "real"}, random_real)
+                      |> Type_Tab.update (@{typ "rat"}, random_rat)
+                      |> Synchronized.var "random_native_types"
+
+  fun get_generator typ = 
+      random_generators |> Synchronized.value
+                        |> (fn tab => Type_Tab.lookup tab typ)
+
+  fun random_datatype ctxt n typ =
+    case get_generator typ of
+      SOME gen => gen ctxt
+      | NONE   =>
+        let val constructors = constructors_of_type ctxt typ
+            val consts_types = map type_of constructors
+            val args = consts_types |> maps (fst o strip_type)
+                                    |> Type_Tab.make_set
+                                    |> (fn set => Type_Tab.delete_safe typ set)
+                                    |> Type_Tab.keys
+                                    |> maps (fn typ => 1 upto n |> map (fn _ => random_datatype ctxt n typ))
+            val typs = map type_of args
+            val target_typ = (consts_types @ typs) ---> typ
+            val term_count = 1 upto (length (consts_types @ typs) + length consts_types * n)
+                          |> map (fn i => (i, count_terms target_typ i))
+                          |> filter (fn (_, c) => c > 0)
+        in term_count |> Utils.weighted_choose
+                      |> random_term target_typ
+                      |> the
+                      |> rpair (constructors @ args)
+                      |> list_comb end
 
 end
 

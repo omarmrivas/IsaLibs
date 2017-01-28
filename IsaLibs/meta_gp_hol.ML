@@ -521,24 +521,31 @@ fun mutation (data : gp_data) t =
               t |> Utils.positions
                 |> map (rpair 1)
                 |> Utils.weighted_choose
-      val bounds = q |> Utils.bounds_at_position t
-                     |> rev
-                     |> map_index (fn (i, x) => (x, Bound i))
-      val target_typ = bounds |> map (snd o fst)
+      fun s_fun () =
+        let val bounds = q |> Utils.bounds_at_position t
+                           |> rev
+                           |> map_index (fn (i, x) => (x, Bound i))
+            val target_typ = bounds |> map (snd o fst)
                               |> (fn typs => typs ---> ty)
-      val term_count = 1 upto (#term_size data)
+            val term_count = 1 upto (#term_size data)
                           |> map (fn i => (i, Random_Terms.count_terms target_typ i))
                           |> filter (fn (_, c) => c > 0)
 (*                          |> tap (map (fn (i, c) => tracing (string_of_int i ^ " : " ^ string_of_int c)))*)
-      val s = term_count |> Utils.weighted_choose
-                         |> Random_Terms.random_term target_typ
-                         |> the
-                         |> rpair (map snd bounds)
-                         |> Envir.beta_eta_contract o list_comb
+            val s = term_count |> Utils.weighted_choose
+                               |> Random_Terms.random_term target_typ
+                               |> the
+                               |> rpair (map snd bounds)
+                               |> Envir.beta_eta_contract o list_comb
+        in s end
+      val s = case try (Random_Terms.random_datatype (#ctxt data) 5) ty of
+                SOME s => if Utils.random () < 0.5
+                          then (Utils.trace_log (#logfile data) (Syntax.string_of_term (#ctxt data) s); s)
+                          else s_fun ()
+              | NONE => s_fun ()
   in Utils.substitute (s, q) t end
 
 fun Mutation (data : gp_data) ss =
-  if Random.random () <= (#mutation_prob data)
+  if Utils.random () <= (#mutation_prob data)
   then
   let val (i, s) = ss |> map_index (fn x => x)
                       |> map (fn (i, s) => ((i, s), size_of_term s))

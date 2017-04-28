@@ -181,7 +181,7 @@ fun s_expressions ctxt str =
                                                    in (tab, e) end) o
 (*                                                   SMTLIB.parse o *)
 (*                                                   (snd o change_default 0) o*)
-                                                   (fn x => SMTLIB.parse x handle PARSE (i, str) => (tracing ("Error on expression: " ^ hd x); reraise (PARSE (i, str)))) o 
+                                                   (fn x => SMTLIB.parse x handle PARSE (i, str) => (tracing ("Error on expression: " ^ hd x); raise (PARSE (i, str)))) o 
                                                    single o
 (*                                                   (fn s => (tracing s; s)) o*)
 (*                                                   clean_comments o*)
@@ -561,9 +561,9 @@ fun s_expression_to_isabelle' _ (S (Sym "assert-not" :: _)) = ""
 fun smt2_to_isabelle ctxt test destiny import prover names smt2_file =
     (let
         val source = File.read (Path.explode smt2_file)
-        val expressions = TimeLimit.timeLimit (Time.fromSeconds 10) (s_expressions ctxt) source
-                              handle TimeLimit.TimeOut => 
-                                (tracing ("Timeout processing: " ^ smt2_file); reraise TimeLimit.TimeOut)
+        val expressions = Timeout.apply (Time.fromSeconds 10) (s_expressions ctxt) source
+                              handle Timeout.TIMEOUT t => 
+                                (tracing ("Timeout processing: " ^ smt2_file); raise Timeout.TIMEOUT t)
         val body = if test
                    then expressions |> map (s_expression_to_isabelle' prover)
                                     |> space_implode "\n\n"
@@ -578,7 +578,7 @@ fun smt2_to_isabelle ctxt test destiny import prover names smt2_file =
                            "end"
 (*        val _ = tracing full_content*)
         val _ = File.write (Path.explode (destiny ^ "/" ^ thy_name ^ ".thy")) full_content
-    in thy_name :: names end) handle PARSE (i, str) => (tracing ("Error on file: " ^ smt2_file); reraise (PARSE (i, str)))
+    in thy_name :: names end) handle PARSE (i, str) => (tracing ("Error on file: " ^ smt2_file); raise (PARSE (i, str)))
 
 fun check_fun str =
   not (String.isSubstring "TOPLEVEL_ERROR raised" str orelse
@@ -614,11 +614,11 @@ fun smt2bash_to_isabelle ctxt destiny import prover smt_files =
                    |> Par_List.map (fn (names, smt_file) =>
                             let val _ = tracing ("Processing file: " ^ smt_file)
                                 val ns = smt2_to_isabelle ctxt true destiny import prover names smt_file
-                                            handle ERROR x => (tracing ("SMT file: " ^ smt_file); reraise (ERROR x))
+                                            handle ERROR x => (tracing ("SMT file: " ^ smt_file); raise (ERROR x))
                                 val name = hd ns
                                 val ok = test_thy (destiny ^ "/" ^ name ^ ".thy") import
                                 val _ = smt2_to_isabelle ctxt false destiny import prover names smt_file
-                                            handle ERROR x => (tracing ("SMT file: " ^ smt_file); reraise (ERROR x))
+                                            handle ERROR x => (tracing ("SMT file: " ^ smt_file); raise (ERROR x))
                             in (smt_file, (ok, name)) end)
 
 fun get_smt2_files temp_dir dir =

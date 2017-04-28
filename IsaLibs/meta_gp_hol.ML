@@ -40,7 +40,7 @@ sig
     (individual -> bool) ->
     int -> int -> int -> int -> int -> real -> gp_result
 
-  val html_solutions : Proof.context -> gp_result list -> string list list
+  val latex_solutions : Proof.context -> gp_result list -> string list list
 end
 
 structure DB_GP
@@ -116,9 +116,9 @@ fun calculate_statistic data equals pool =
                  |> (fn x => real x / real (#population_size data))
       val av_error =
             pool |> map (the o #fit)
-                 |> pair Rat.zero
-                 |> Library.foldl (op +/)
-                 |> (fn x => x // Rat.rat_of_int (#population_size data))
+                 |> pair (Rat.of_int 0)
+                 |> Library.foldl (op +)
+                 |> (fn x => x / Rat.of_int (#population_size data))
       val bst_individual =
             pool |> Metis_Useful.minimum (Rat.ord o apply2 (the o #fit))
                  |> fst
@@ -193,7 +193,7 @@ fun mutual_function lthy (names,eqns) =
     let val naming = map (fn x => ((Binding.qualified_name x), NONE, NoSyn)) names
     in
       Function_Fun.add_fun naming
-                           (map (fn t => ((Binding.empty, []), t)) eqns)
+                           (map (fn t => (((Binding.empty, []), t),[],[])) eqns)
                            fun_config
                            lthy
     end
@@ -277,7 +277,7 @@ fun initial_population (data : gp_data) =
        fun new_individual () =
           let val trms = vars |> map2 (fn tc => fn (_, typ) =>
                                         tc |> Utils.weighted_choose
-                                           |> Random_Terms.random_term typ
+                                           |> Random_Terms.random_lambda_term typ
                                            |> the) (#term_count data)
               val t' = prep trms
           in (trms, t') end
@@ -289,12 +289,12 @@ fun initial_population (data : gp_data) =
              val rat = if calls_ok closures trms
                        then let (*val time = Date.toString (Date.fromTimeLocal (Time.now ()))
                                 val _ = tracing (time ^ " (ok) " ^ Syntax.string_of_term ctxt i)*)
-                            in (SOME (TimeLimit.timeLimit (#timeout data) ((#fitness data) ctxt) closures)
-                                  handle TimeLimit.TimeOut => (tracing ("Timeout in: " ^ Utils.str_of_terms ctxt trms);
+                            in (SOME (Timeout.apply (#timeout data) ((#fitness data) ctxt) closures)
+                                  handle Timeout.TIMEOUT _ => (tracing ("Timeout in: " ^ Utils.str_of_terms ctxt trms);
                                                                NONE)
                                         | unknown => (tracing ("Unknown error(genome): " ^ Utils.str_of_terms ctxt trms);
                                                       tracing ("Unknown error(norm): " ^ Utils.string_of_term ctxt i);
-                                                      reraise unknown)) end
+                                                      raise unknown)) end
                        else let (*val time = Date.toString (Date.fromTimeLocal (Time.now ()))
                                 val _ = tracing (time ^ " (bad) " ^ Syntax.string_of_term ctxt i)*)
                             in NONE end
@@ -528,16 +528,16 @@ fun mutation (data : gp_data) t =
             val target_typ = bounds |> map (snd o fst)
                               |> (fn typs => typs ---> ty)
             val term_count = 1 upto (#term_size data)
-                          |> map (fn i => (i, Random_Terms.count_terms target_typ i))
+                          |> map (fn i => (i, Random_Terms.count_lambda_terms target_typ i))
                           |> filter (fn (_, c) => c > 0)
 (*                          |> tap (map (fn (i, c) => tracing (string_of_int i ^ " : " ^ string_of_int c)))*)
             val s = term_count |> Utils.weighted_choose
-                               |> Random_Terms.random_term target_typ
+                               |> Random_Terms.random_lambda_term target_typ
                                |> the
                                |> rpair (map snd bounds)
                                |> Envir.beta_eta_contract o list_comb
         in s end
-      val s = case try (Random_Terms.random_datatype (#ctxt data) 5) ty of
+      val s = case Random_Terms.random_datatype (#ctxt data) 5 ty of
                 SOME s => if Utils.random () < 0.5
                           then (Utils.trace_log (#logfile data) (Syntax.string_of_term (#ctxt data) s); s)
                           else s_fun ()
@@ -597,16 +597,16 @@ fun next_generation (data : gp_data)
                                        |> mk_individual ctxt genome subst norm)
       val lcm = Library.foldl (fn (lcm, ind) =>
               ind |> (the o #fit)
-                  |> (snd o Rat.quotient_of_rat)
+                  |> (snd o Rat.dest)
                   |> Integer.lcm lcm) (1, pool')
                   |> rpair 1
-                  |> Rat.rat_of_quotient
+                  |> Rat.make
       val pool' = pool' |> map (fn {ctxt, genome,
                                     subst, norm,
-                                    fit} => lcm */ (the fit)
+                                    fit} => lcm * (the fit)
                                               |> SOME
                                               |> mk_individual ctxt genome subst norm)
-                        |> map (fn ind => (ind, (fst o Rat.quotient_of_rat o the) (#fit ind)))
+                        |> map (fn ind => (ind, (fst o Rat.dest o the) (#fit ind)))
       val minv = pool' |> Utils.minby int_ord snd
                        |> snd
       val  pool' = map (fn (t, i) => (t, i div minv)) pool'
@@ -637,12 +637,12 @@ fun next_generation (data : gp_data)
                           val rat = if calls_ok closures trms
                                     then let (*val time = Date.toString (Date.fromTimeLocal (Time.now ()))
                                              val _ = tracing (time ^ " (ok) " ^ Syntax.string_of_term ctxt i')*)
-                                         in (TimeLimit.timeLimit (#timeout data) ((#fitness data) ctxt) closures
-                                           handle TimeLimit.TimeOut => (tracing ("Timeout in: " ^ Utils.str_of_terms ctxt trms);
+                                         in (Timeout.apply (#timeout data) ((#fitness data) ctxt) closures
+                                           handle Timeout.TIMEOUT _ => (tracing ("Timeout in: " ^ Utils.str_of_terms ctxt trms);
                                                                         (#bad_fitness data))
                                                 | unknown => (tracing ("Unknown error(genome): " ^ Utils.str_of_terms ctxt trms);
                                                               tracing ("Unknown error(norm): " ^ Utils.string_of_term ctxt i');
-                                                              reraise unknown))
+                                                              raise unknown))
                                               |> SOME end
 (*                                         in (#fitness data) ctxt closures end*)
                                     else let (*val time = Date.toString (Date.fromTimeLocal (Time.now ()))
@@ -715,7 +715,7 @@ fun term_count tracing ctxt scheme term_size =
          1 upto term_size
            |> tap (fn _ => tracing ("Precalculating the inhabitants of type: " ^
                                     Utils.string_of_typ ctxt typ))
-           |> Par_List.map (fn i => (i, Random_Terms.count_terms typ i))
+           |> Par_List.map (fn i => (i, Random_Terms.count_lambda_terms typ i))
            |> filter (fn (_, c) => c > 0)
            |> tap (map (fn (i, c) => tracing (string_of_int i ^ " : " ^ string_of_int c))))
   end
@@ -776,16 +776,16 @@ fun different_solutions results =
           |> (fn entries => fold Term_Tab.update entries Term_Tab.empty)
           |> Term_Tab.dest
 
-fun html_solutions ctxt results =
+fun latex_solutions ctxt results =
   let val results = different_solutions results
-      fun to_html t = myHTML.plain (Utils.html_string_of_term ctxt t)
-      fun to_htmls substs =
-          substs |> map (fn (v, lam) => to_html v ^ "&map;" ^
-                                        to_html lam)
+      val to_latex = Utils.latex_string_of_term ctxt
+      fun to_latexs substs =
+          substs |> map (fn (v, lam) => to_latex v ^ " \\mapsto " ^
+                                        to_latex lam)
                            |> commas
-                           |> enclose "{" "}"
+                           |> enclose "$" "$"
   in results |> map_index (fn (i, (norm, subst)) => 
-                            [string_of_int i, to_html norm, to_htmls subst]) end
+                            [string_of_int i, to_latex norm, to_latexs subst]) end
 
 end
 

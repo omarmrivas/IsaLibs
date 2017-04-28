@@ -8,11 +8,12 @@
 
 signature RANDOM_TERMS =
 sig
-  val count_terms         : typ -> int -> int
-  val random_term         : typ -> int -> term option
-  val enumerate_terms     : typ -> int -> term list
-  val enumerate_all_terms : typ -> int -> term list
-  val random_datatype     : Proof.context -> int -> typ -> term
+  val count_lambda_terms         : typ -> int -> int
+  val random_lambda_term         : typ -> int -> term option
+  val enumerate_lambda_terms     : typ -> int -> term list
+  val enumerate_all_lambda_terms : typ -> int -> term list
+  val random_datatype            : Proof.context -> int -> typ -> term option
+  val random_term                : Proof.context -> int -> typ -> term option
 end
 
 structure DB_Random_Terms
@@ -98,7 +99,7 @@ val memoized_count_terms_var =
     Synchronized.var "memoized_count_terms"
                      (IntType_Tab.empty : int IntType_Tab.table)
 
-fun count_terms A s =
+fun count_lambda_terms A s =
   Utils.memoize_function IntType_Tab.lookup IntType_Tab.update memoized_count_terms_var
   (fn (s, A) => count_term A [] s) (s, A)
 
@@ -114,14 +115,14 @@ fun normalize_closed_term level Vars _ (Free (n, _)) =
     | normalize_closed_term level Vars Names (Abs (n, T, t)) =
       let val name = singleton (Name.variant_list Names) "x"
       in Abs (name, T, normalize_closed_term (level + 1) ((n, level) :: Vars) (name :: Names) t) end
-    | normalize_closed_term _ _ _ _ = raise Library.ERROR "Should not be thrown"
+    | normalize_closed_term _ _ _ _ = raise ERROR "Should not be thrown"
 
 local
   fun choose_arg_size (Bis, _) Env s num_arg_terms =
       let val rand_num = Random.random_range 0 (num_arg_terms - 1)
 (*          val _ = tracing ("choose_arg_size (0, " ^ string_of_int (num_arg_terms - 1) ^ "): " ^ string_of_int rand_num)*)
           val m = length Bis
-          fun semi_fold _ [] = raise Library.ERROR "Should not be thrown"
+          fun semi_fold _ [] = raise ERROR "Should not be thrown"
             | semi_fold num_terms (Ss :: list) =
               let val multipl = if null Ss then 0
                                 else ((1,0), Ss) |> Library.foldl (fn ((m,i), si) => (m * (count_term (nth Bis i) Env si), i + 1))
@@ -139,7 +140,7 @@ local
 (*          val _ = tracing ("choose_head_var (0, " ^ string_of_int (num_app_terms - 1) ^ "): " ^
                            " valid set size: " ^ string_of_int (length vset) ^ " - " ^
                            string_of_int rand_num)*)
-          fun semi_fold _ [] = raise Library.ERROR "Should not be thrown"
+          fun semi_fold _ [] = raise ERROR "Should not be thrown"
             | semi_fold num_terms ((Bis, B) :: list) =
               let val count_head_var = count_head_var_arg_terms (Bis, B) Env s
                   val num_terms = num_terms + count_head_var
@@ -198,10 +199,12 @@ local
 
 in
 
-fun random_term A s =
-    case gen_term A [] s of
-      SOME t => SOME (normalize_closed_term 0 [] [] t)
-    | NONE => NONE
+fun random_lambda_term A s =
+    (case gen_term A [] s of
+       SOME t => SOME (normalize_closed_term 0 [] [] t)
+     | NONE => NONE)
+      handle Random.RANDOM => NONE
+
 
 end
 
@@ -287,21 +290,21 @@ val memoized_enumerate_terms_var =
     Synchronized.var "memoized_enumerate_terms"
                      (IntType_Tab.empty : term list IntType_Tab.table)
 
-fun enumerate_terms A s =
+fun enumerate_lambda_terms A s =
   Utils.memoize_function IntType_Tab.lookup IntType_Tab.update memoized_enumerate_terms_var
   (fn (s, A) => s |> gen_term A []
                   |> map (fn t => normalize_closed_term 0 [] [] t)) (s, A)
 
-fun enumerate_all_terms A s =
+fun enumerate_all_lambda_terms A s =
   1 upto s
-    |> maps (enumerate_terms A)
+    |> maps (enumerate_lambda_terms A)
 
 end
 
   fun constructors_of_type ctxt typ =
     let val thy = Proof_Context.theory_of ctxt
     in case typ of
-        Type (name, _) => 
+        Type (name, _) =>
           (case BNF_LFP_Compat.get_constrs thy name of
             SOME l => l |> map (strip_type o snd)
                         |> map (fn (typs, _) => (map (fn _ => dummyT) typs, typ))
@@ -345,7 +348,7 @@ end
 
   fun random_datatype ctxt n typ =
     case get_generator typ of
-      SOME gen => gen ctxt
+      SOME gen => SOME (gen ctxt)
       | NONE   =>
         let val constructors = constructors_of_type ctxt typ
             val consts_types = map type_of constructors
@@ -353,17 +356,36 @@ end
                                     |> Type_Tab.make_set
                                     |> (fn set => Type_Tab.delete_safe typ set)
                                     |> Type_Tab.keys
-                                    |> maps (fn typ => 1 upto n |> map (fn _ => random_datatype ctxt n typ))
+                                    |> maps (fn typ => 1 upto n |> map_filter (fn _ => random_datatype ctxt n typ))
             val typs = map type_of args
             val target_typ = (consts_types @ typs) ---> typ
             val term_count = 1 upto (length (consts_types @ typs) + length consts_types * n)
-                          |> map (fn i => (i, count_terms target_typ i))
+                          |> map (fn i => (i, count_lambda_terms target_typ i))
                           |> filter (fn (_, c) => c > 0)
-        in term_count |> Utils.weighted_choose
-                      |> random_term target_typ
+        in if null term_count
+           then NONE
+           else
+           term_count |> Utils.weighted_choose
+                      |> random_lambda_term target_typ
                       |> the
                       |> rpair (constructors @ args)
-                      |> list_comb end
+                      |> list_comb
+                      |> SOME
+                      handle ERROR _ => NONE end
+
+fun random_term ctxt n typ =
+  let fun random_term_aux ts = 
+    case ts of
+      [] => NONE
+     | _::_ => ts |> map (fn t => (t, 1))
+                  |> Utils.weighted_choose
+                  |> SOME
+  in  case strip_type typ of
+      ([], _) => (1 upto n) |> map_filter (fn n => random_datatype ctxt n typ)
+                            |> random_term_aux
+    | (typs, _) => (1 upto n) |> map_filter (fn n => random_lambda_term typ (n + length typs))
+                              |> random_term_aux
+  end
 
 end
 

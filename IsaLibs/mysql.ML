@@ -107,7 +107,7 @@ fun search_individual ctxt id : individual option =
                                    genome = evaluate_genome genome,
                                    subst = evaluate_subst subst,
                                    norm = evaluate_norm norm,
-                                   fit = SOME (Rat.rat_of_quotient (evaluate_fit fit))}
+                                   fit = SOME (Rat.make (evaluate_fit fit))}
                               | _ => raise ERROR "Error search_individual")
                  |> SOME
   end
@@ -119,7 +119,7 @@ fun insert_individual (individual : individual) =
       val subst_str = escape_string (ML_Syntax.print_pair typs terms (#subst individual))
       val norm_str = escape_string (ML_Syntax.print_term (#norm individual))
       val norm_hash = (string_of_int o ATP_Util.hash_string) norm_str
-      val fit_str = escape_string (((ML_Syntax.print_pair ML_Syntax.print_int ML_Syntax.print_int) o Rat.quotient_of_rat) ((the o #fit) individual))
+      val fit_str = escape_string (((ML_Syntax.print_pair ML_Syntax.print_int ML_Syntax.print_int) o Rat.dest) ((the o #fit) individual))
       val insert_individual = "INSERT INTO `individuals`(`genome`, `subst`, `norm`, `hash`, `fit`) VALUES (\"" ^genome_str^ "\",\"" ^ subst_str ^"\",\"" ^ norm_str ^ "\",\"" ^ norm_hash ^ "\",\""^fit_str^"\")"
       val _ = Isabelle_System.bash_output ("mysql -u isalibs --password='isalibs' -h 'localhost' -e '" ^ insert_individual ^ "' isalibs")
   in (#norm individual, get_max_id "individuals" ("WHERE hash=\"" ^ norm_hash ^ "\"")) end

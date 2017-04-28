@@ -79,9 +79,9 @@ fun prove_from_spass ctxt0 args conjecture =
 fun prove ctxt args method conjecture timeOut = 
   let fun prove' ctxt args method conjecture timeOut = 
   (conjecture
-    |> TimeLimit.timeLimit (Time.fromSeconds timeOut)
+    |> Timeout.apply (Time.fromSeconds timeOut)
                            (prove_from_method ctxt args method))
-      handle TimeLimit.TimeOut => NONE
+      handle Timeout.TIMEOUT _ => NONE
   in if can Local_Theory.target_of ctxt
      then let val ctxt = Local_Theory.target_of ctxt
           in prove' ctxt args method conjecture timeOut end

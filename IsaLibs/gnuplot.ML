@@ -103,12 +103,13 @@ fun gp_statistics_to_cumulative_prob generations (sts : gp_result list) =
         | reduce (Unsolved []) = raise ERROR "Can not reduce"
         | reduce (Unsolved (_ :: sts)) = Unsolved sts
       val trials = real (length sts)
+      val zero = Rat.of_int 0
   in 0 upto generations - 1
        |> pair ([], sts)
        |> Library.foldl (fn ((R, sts), _) =>
             let val row = map extract sts
                 val cum = (0, row)
-                            |> Library.foldl (fn (cum, n) => if Rat.eq (Rat.zero, n)
+                            |> Library.foldl (fn (cum, n) => if zero = n
                                                              then cum + 1
                                                              else cum)
                             |> real

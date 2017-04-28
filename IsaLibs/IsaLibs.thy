@@ -6,7 +6,7 @@ keywords "rec_complete" :: thy_decl and
          "orient_rules" :: thy_decl
 begin
 ML_file "$ISABELLE_HOME/src/HOL/TPTP/sledgehammer_tactics.ML"
-ML_file "html.ML"
+(*ML_file "html.ML"*)
 ML_file "const_names.ML"
 ML_file "tables.ML"
 ML_file "utils.ML"
@@ -15,8 +15,10 @@ ML_file "latex.ML"
 ML_file "orders.ML"
 ML_file "sat_interface.ML"
 ML_file "dependency_pair.ML"
-ML_file "counter_example.ML"
 ML_file "random_terms.ML"
+ML_file "counter_example.ML"
+ML_file "equivalence_terms.ML"
+ML_file "counting_terms.ML"
 ML_file "enumerated_terms.ML"
 ML_file "aprove.ML"
 ML_file "prover.ML"
@@ -34,11 +36,104 @@ ML_file "papers/ml_database.ML"
 ML_file "papers/ESWA2016.ML"
 ML_file "papers/rectilinear_crossing.ML"
 
-(*ML {*
-  val r = DB_Random_Terms.random_datatype @{context} 10 @{typ "((nat list) list) list"}
-  val _ = tracing (Syntax.string_of_term @{context} r)
-*}*)
+datatype Nat = zero | suc Nat
+  
+fun suma where
+"suma zero y = y"|
+"suma (suc x) y = suc (suma x y)"
 
+ML {*
+  val ee = Utils.normalise_term @{context} [] @{prop "23 - (20::nat) = x"}
+  val _ = tracing (Syntax.string_of_term @{context} ee)
+*}
+
+ML {*
+  case DB_InductiveTacs.inductive_prover @{context} DB_InductiveTacs.ind_auto_tac' @{prop "suma x y = suma y x"} of
+    DB_InductiveTacs.Theorem thm  => [tracing "proved"]
+  | DB_InductiveTacs.Failure trms => 
+      let val _ = tracing "Failures:"
+          val _ = map (tracing o Syntax.string_of_term @{context}) trms
+          val gs = Utils.generalizations @{theory} 2 trms
+          val _ = tracing "Generalizations:"
+          val _ = map (tracing o Syntax.string_of_term @{context}) gs
+      in [] end
+*}
+  
+ML {*
+  val temp = Unsynchronized.ref (Net.empty : term Net.net)
+  val failures = Unsynchronized.ref (Net.empty : term Net.net)
+*}
+  
+lemma "x + y = y + (x :: nat)"
+(*  apply (tactic {* DB_InductiveTacs.ind_auto_tac @{context} *})*)
+(*  apply (tactic {* DB_InductiveTacs.ind_auto_tac' failures @{context} *})*)
+  apply (tactic {* DB_InductiveTacs.ind_auto_tac'' failures @{context} *})
+    done
+(*  apply (tactic {* DB_InductiveTacs4.induct_auto_tac' temp failures @{context} *})*)
+
+ML {*
+  val s = length (Net.content (!failures))
+  val _ = map (tracing o Syntax.string_of_term @{context}) (Net.content (!failures))
+*}
+    
+  
+
+ML {*
+  val prop = @{prop "2*x \<ge> x \<and> length xs = 12"}
+  val ctxt = @{context}
+  val frees = Term.add_frees prop []
+  val r = Quickcheck_Common.instantiate_goals @{context} frees [(prop, [])]
+  val r = hd r
+  val _ = r |> map (fn (tyop, (t, ts)) =>
+          case tyop of
+            SOME ty => let val typ_str = Syntax.string_of_typ ctxt ty
+                           val t_str = Syntax.string_of_term ctxt t
+                       in tracing ("(" ^ typ_str ^ "," ^ t_str ^ ")") end
+          | NONE => tracing ("(NONE," ^  Syntax.string_of_term ctxt t ^ ")"))
+*}
+  
+ML {*
+  val prop = @{prop "(f::'a\<Rightarrow>'b) x = y"}
+  val tfrees = Term.add_tfrees prop []
+  val inst = map (fn f => (TFree f, @{typ "int"})) tfrees
+  val t = subst_atomic_types inst prop
+  val _ = tracing (Syntax.string_of_term ctxt t)
+*}
+  
+  
+ML {*
+  val (tab, conjecture) = DB_Counter_Example.preprocess_conjecture ctxt 5 5 prop
+  val foo = conjecture |> DB_Counter_Example.preprocess_counter_example ctxt 5 5 tab
+*}
+  
+ML {*
+  val c = Random_Terms.count_lambda_terms @{typ "nat\<Rightarrow>nat\<Rightarrow>nat"} 3
+  val t = Random_Terms.random_term @{context} 6 @{typ "Enum.finite_2"}
+  val _ = tracing (Syntax.string_of_term @{context} (the t))
+*}
+  
+ML {*
+(*  Utils.write_to_file "temporal.txt" (DB_Utils.latex_string_of_term @{context} @{term "x + y < 25"})*)
+  DB_Utils.latex_string_of_term @{context} @{term "x + y < 25"}
+*}
+  
+ML {*
+  val fs = DB_Counting_Terms.surjections ["a", "b", "e"] ["c", "d"]
+  val s = length fs
+  val r = DB_Counting_Terms.equivalent @{typ "(nat\<Rightarrow>nat)\<Rightarrow>real\<Rightarrow>int"} @{typ "real\<Rightarrow>int"}
+  val foo = DB_Counting_Terms.embeddable @{typ "real\<Rightarrow>nat\<Rightarrow>real\<Rightarrow>int"} @{typ "nat\<Rightarrow>real\<Rightarrow>int"}
+  val bar = DB_Counting_Terms.direct_prolongation @{typ "(int\<Rightarrow>real)\<Rightarrow>nat\<Rightarrow>int"} @{typ "(int\<Rightarrow>real)\<Rightarrow>nat\<Rightarrow>int"}
+*}
+
+ML {*
+  val r = DB_Random_Terms.random_datatype @{context} 4 @{typ "nat\<Rightarrow>nat"}
+  val _ = case r of
+            SOME t => tracing (Syntax.string_of_term @{context} t)
+          | NONE => tracing "NONE"
+*}
+
+  
+  
 (*ML_file "$ISABELLE_HOME/src/Tools/Spec_Check/base_generator.ML"
 ML_file "$ISABELLE_HOME/src/Tools/Spec_Check/generator.ML"*)
 

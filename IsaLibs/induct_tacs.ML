@@ -14,6 +14,8 @@ infix 0 INTERLEAVE INTERLEAVE'
 
 signature INDUCTIVE_TACS =
 sig
+  datatype result = Theorem of thm | Failure of term list
+
   (* Utilery tactics *)
 
   val INTERLEAVE  : ('a -> 'b Seq.seq) * ('a -> 'b Seq.seq) -> 'a -> 'b Seq.seq
@@ -195,13 +197,36 @@ fun primitive_induction ctxt (goal, i) =
       val tac' = (structural_induction_tac ctxt frees fixes (goal, i) APPEND
                   computation_induction_tac ctxt thy (goal, i) APPEND
                   split_tactic ctxt thy vars (goal, i))
-      val tac = tac' THEN (auto_clasimpset_tac ctxt i)
-  in tac ORELSE tac'
+      val tac = tac' THEN (TRY (auto_clasimpset_tac ctxt i))
+  in tac(*tac ORELSE tac'*)
   end
+
+(* Failure analysis *)
+fun check_fail_proof_state sts ctxt =
+  fn (goal, _) =>
+  let val thy = Proof_Context.theory_of ctxt
+      val _ = sts := Net.insert_term_safe (Pattern.equiv thy) (goal,goal) (!sts)
+  in no_tac end
 
 fun ind_auto_tac ctxt =
     (CHANGED o ALLGOALS)
        (SUBGOAL (primitive_induction ctxt))
+
+(*fun ind_auto_tac' sts ctxt =
+    SOLVE ((CHANGED o ALLGOALS)
+       (SUBGOAL ((primitive_induction ctxt) THEN' (TRY' (check_fail_proof_state sts ctxt)))))*)
+
+fun ind_auto_tac' sts ctxt =
+    SOLVE ((CHANGED o ALLGOALS)
+       ((SUBGOAL (primitive_induction ctxt)) THEN'
+        (TRY' (SUBGOAL(check_fail_proof_state sts ctxt)))))
+
+(*(* Performs induction and rewriting then stores remaining subgoals in fails *)
+fun induct_auto_tac' set fails ctxt = 
+        SOLVE ((CHANGED o ALLGOALS)
+           (((EVERY' [SUBGOAL (choose_induct_tac set ctxt),
+                        auto_clasimpset_tac ctxt]) APPEND' (auto_clasimpset_tac ctxt))
+      THEN' (TRY' (check_fail_proof_state fails ctxt))))*)
 
 (* Probably there is a better way to know if we have proved the theorem *)
 (* this function won't work in goals with spurious premises *)
@@ -223,51 +248,51 @@ fun theorem_heuristic i thm = Thm.nprems_of thm + i
 fun bfirst_ind_auto_tac (ctxt : Proof.context) thm =
   let val timeout = Prover.max_time_in_proof
                       |> Config.get ctxt
-      val _ = thm |> ((fn t => myHTML.plain (Utils.html_string_of_term ctxt t)) o (Thm.concl_of))
-                  |> (fn str => tracing ("HTML: " ^ str))
+      val _ = thm |> ((Utils.latex_string_of_term ctxt) o (Thm.concl_of))
+                  |> (fn str => tracing ("Latex: " ^ str))
   in
-    TimeLimit.timeLimit (Time.fromSeconds timeout) (BEST_FIRST (theorem_proved',theorem_heuristic 0) (ind_auto_tac ctxt)) thm
-      handle TimeLimit.TimeOut => Seq.empty
+    Timeout.apply (Time.fromSeconds timeout) (BEST_FIRST (theorem_proved',theorem_heuristic 0) (ind_auto_tac ctxt)) thm
+      handle Timeout.TIMEOUT _ => Seq.empty
   end
 (* A* search: similar to BEST_FIRST but current level of search is taken into account *)
 fun astar_ind_auto_tac (ctxt : Proof.context) thm =
   let val timeout = Prover.max_time_in_proof
                       |> Config.get ctxt
-      val _ = thm |> ((fn t => myHTML.plain (Utils.html_string_of_term ctxt t)) o (Thm.concl_of))
-                  |> (fn str => tracing ("HTML: " ^ str))
+      val _ = thm |> ((Utils.latex_string_of_term ctxt) o (Thm.concl_of))
+                  |> (fn str => tracing ("Latex: " ^ str))
   in
-    TimeLimit.timeLimit (Time.fromSeconds timeout) (ASTAR (theorem_proved',theorem_heuristic) (ind_auto_tac ctxt)) thm
-      handle TimeLimit.TimeOut => Seq.empty
+    Timeout.apply (Time.fromSeconds timeout) (ASTAR (theorem_proved',theorem_heuristic) (ind_auto_tac ctxt)) thm
+      handle Timeout.TIMEOUT _ => Seq.empty
   end
 
 fun iter_dep_ind_auto_tac (ctxt : Proof.context) thm =
   let val timeout = Prover.max_time_in_proof
                       |> Config.get ctxt
-      val _ = thm |> ((fn t => myHTML.plain (Utils.html_string_of_term ctxt t)) o (Thm.concl_of))
-                  |> (fn str => tracing ("HTML: " ^ str))
+      val _ = thm |> ((Utils.latex_string_of_term ctxt) o (Thm.concl_of))
+                  |> (fn str => tracing ("Latex: " ^ str))
   in
-    TimeLimit.timeLimit (Time.fromSeconds timeout) (ITER_DEEPEN 10 theorem_proved' (fn _ => ind_auto_tac ctxt)) thm
-      handle TimeLimit.TimeOut => Seq.empty
+    Timeout.apply (Time.fromSeconds timeout) (ITER_DEEPEN 10 theorem_proved' (fn _ => ind_auto_tac ctxt)) thm
+      handle Timeout.TIMEOUT _ => Seq.empty
   end
 
 fun dep_ind_auto_tac (ctxt : Proof.context) thm =
   let val timeout = Prover.max_time_in_proof
                       |> Config.get ctxt
-      val _ = thm |> ((fn t => myHTML.plain (Utils.html_string_of_term ctxt t)) o (Thm.concl_of))
-                  |> (fn str => tracing ("HTML: " ^ str))
+      val _ = thm |> ((Utils.latex_string_of_term ctxt) o (Thm.concl_of))
+                  |> (fn str => tracing ("Latex: " ^ str))
   in
-    TimeLimit.timeLimit (Time.fromSeconds timeout) (DEPTH_FIRST theorem_proved' (ind_auto_tac ctxt)) thm
-      handle TimeLimit.TimeOut => Seq.empty
+    Timeout.apply (Time.fromSeconds timeout) (DEPTH_FIRST theorem_proved' (ind_auto_tac ctxt)) thm
+      handle Timeout.TIMEOUT _ => Seq.empty
   end
 
 fun breadth_first_ind_auto_tac (ctxt : Proof.context) thm =
   let val timeout = Prover.max_time_in_proof
                       |> Config.get ctxt
-      val _ = thm |> ((fn t => myHTML.plain (Utils.html_string_of_term ctxt t)) o (Thm.concl_of))
-                  |> (fn str => tracing ("HTML: " ^ str))
+      val _ = thm |> ((Utils.latex_string_of_term ctxt) o (Thm.concl_of))
+                  |> (fn str => tracing ("Latex: " ^ str))
   in
-    TimeLimit.timeLimit (Time.fromSeconds timeout) (BREADTH_FIRST theorem_proved' (ind_auto_tac ctxt)) thm
-      handle TimeLimit.TimeOut => Seq.empty
+    Timeout.apply (Time.fromSeconds timeout) (BREADTH_FIRST theorem_proved' (ind_auto_tac ctxt)) thm
+      handle Timeout.TIMEOUT _ => Seq.empty
   end
 
 val method_setup_comp =
@@ -318,7 +343,21 @@ val _ = Context.>> (Context.map_theory method_setup_best)
 val _ = Context.>> (Context.map_theory method_setup_iter_dep)
 val _ = Context.>> (Context.map_theory method_setup_dep_first)
 val _ = Context.>> (Context.map_theory method_setup_breadth_first)
+
+datatype result = Theorem of thm | Failure of term list
     
+fun inductive_prover ctxt tactic prop =
+  let val failures = Unsynchronized.ref (Net.empty : term Net.net)
+  in
+  ((K (tactic failures ctxt))
+    |> Goal.prove ctxt [] [] prop)
+    |> Theorem
+  handle ERROR _ => (!failures)
+                      |> Net.content
+(*                      |> tap (map (tracing o Syntax.string_of_term ctxt))*)
+                      |> Failure
+  end
+
 end
 
 structure InductiveTacs : INDUCTIVE_TACS = DB_InductiveTacs

@@ -104,11 +104,11 @@ fun exhaust debug ctxt scheme term_size simps test =
                         else ()
             val trms = count |> map fst
                              |> map2 pair typs
-                             |> Par_List.map (fn (x, y) => Random_Terms.enumerate_terms x y)
+                             |> Par_List.map (fn (x, y) => Random_Terms.enumerate_lambda_terms x y)
             fun check (t, trms) =
               case GP.well_defined ctxt t of
-                SOME ctxt => if TimeLimit.timeLimit timeout (test ctxt) (GP.fnames_of ctxt)
-                                handle TimeLimit.TimeOut => (GP.timeout_error ctxt t;
+                SOME ctxt => if Timeout.apply timeout (test ctxt) (GP.fnames_of ctxt)
+                                handle Timeout.TIMEOUT _ => (GP.timeout_error ctxt t;
                                                              false)
                              then SOME (ctxt, t, trms)
                              else NONE

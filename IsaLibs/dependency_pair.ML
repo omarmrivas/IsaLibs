@@ -757,8 +757,8 @@ fun terminates' ctxt TRS =
 
 fun terminates ctxt TRS =
   let val timeOut = Config.get ctxt max_time_in_termination
-  in TimeLimit.timeLimit (Time.fromSeconds timeOut) (terminates' ctxt) TRS
-        handle TimeLimit.TimeOut => false
+  in Timeout.apply (Time.fromSeconds timeOut) (terminates' ctxt) TRS
+        handle Timeout.TIMEOUT _ => false
   end
 
 end

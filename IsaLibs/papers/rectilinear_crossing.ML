@@ -40,12 +40,12 @@ val empty_graph = PGraph {vertices = [],
 fun is_collinear (x, y) ((x1, y1), (x2, y2)) =
     let val numerator = Rat.add y2 (Rat.neg y1)
         val denominator = Rat.add x2 (Rat.neg x1)
-    in if Rat.eq (denominator, Rat.zero)
-       then Rat.eq (x, x1)
+    in if denominator = Rat.of_int 0
+       then x = x1
        else
          let val m = Rat.mult numerator (Rat.inv denominator)
              val y' = Rat.add (Rat.mult m (Rat.add x (Rat.neg x1))) y1
-         in Rat.eq (y, y') end
+         in y = y' end
     end
 
 fun cross_product2D ((vx, vy), (wx, wy)) = Rat.add (Rat.mult vx wy) (Rat.neg (Rat.mult vy wx))
@@ -59,13 +59,15 @@ fun intersect_edges (edge1, edge2) =
         val s = minus_vector edge2
         val q_minus_p = minus_vector (p, q)
         val r_cross_s = cross_product2D (r, s)
-    in if Rat.eq (r_cross_s, Rat.zero) (* parallel edges *)
+        val zero = Rat.of_int 0
+        val one = Rat.of_int 1
+    in if r_cross_s = Rat.of_int 0 (* parallel edges *)
        then false
        else let val t = Rat.mult (cross_product2D (q_minus_p, s)) (Rat.inv r_cross_s)
-            in if Rat.le t Rat.zero orelse Rat.le Rat.one t
+            in if Rat.le t zero orelse Rat.le one t
                then false
                else let val u = Rat.mult (cross_product2D (q_minus_p, r)) (Rat.inv r_cross_s)
-                    in if Rat.le u Rat.zero orelse Rat.le Rat.one u
+                    in if Rat.le u zero orelse Rat.le one u
                        then false
                        else true
                     end

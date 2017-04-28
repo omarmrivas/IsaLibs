@@ -21,7 +21,7 @@ fun write_simpset () =
     [@{term "op +"}, @{term "if x then y else z"}, @{term "[]"},
      @{term "hd"}, @{term "tl"}, @{term "Suc"}, @{term "op #"}, @{term "op -"}]
   val l = length simps
-  val content = simps |> map ((fn t => myHTML.plain (Utils.html_string_of_term @{context} t)) o (Thm.full_prop_of))
+  val content = simps |> map ((Utils.latex_string_of_term @{context}) o (Thm.full_prop_of))
                       |> distinct (op =)
                       |> map single
                       |> map_index (fn (i,e) => string_of_int i :: e)

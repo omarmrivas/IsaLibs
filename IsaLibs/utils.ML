@@ -26,7 +26,8 @@ sig
   
   (* Terms *)
   val string_of_term     : Proof.context -> term -> string
-  val html_string_of_term     : Proof.context -> term -> string
+  val latex_string_of_term     : Proof.context -> term -> string
+(*  val html_string_of_term     : Proof.context -> term -> string*)
   val string_of_typ      : Proof.context -> typ -> string
   val int_of_string      : string -> int
   val unique_names       : term -> term
@@ -47,6 +48,7 @@ sig
   val generalizations    : theory -> int -> term list -> term list
   val generalizations'   : theory -> int -> term list -> term list
   val is_trivial         : term -> bool
+  val normalise_term     : Proof.context -> thm list -> term -> term 
 
   (* Rewrite rules *)
   val lhs                : term -> term
@@ -92,6 +94,7 @@ sig
   val next_digit         : int list -> int list -> int list option
   val binomial_coefficient: int -> int -> int
   val choose             : 'a list -> int -> int -> 'a list
+  val dfs                : 'a list -> ('a -> bool) -> ('a -> 'a list) -> ('a * 'a list) option
   val all_permutations   : 'a list -> 'a list Seq.seq
   val arrangements       : int -> 'a list -> 'a list Seq.seq
   val lazy_one_of_each   : 'a list list -> unit -> 'a list option
@@ -128,7 +131,7 @@ structure ContextSet = Table(
 (*fun safe_eval txt a f b = the_default (tracing txt; a) (try f b)*)
 fun safe_eval _ a f b = the_default a (try f b)
 
-val rat_to_float = op / o apply2 real o Rat.quotient_of_rat
+val rat_to_float = op / o apply2 real o Rat.dest
 
 (* Discrete mathematics utils *)
 
@@ -337,11 +340,17 @@ fun string_of_term ctxt t =
                        |> Config.put show_question_marks false
     in Print_Mode.setmp [] (Syntax.string_of_term ctxt') t end
 
-fun html_string_of_term ctxt t =
+fun latex_string_of_term ctxt t =
     let
       val ctxt' = ctxt |> Config.put show_markup false
                        |> Config.put show_question_marks false
-    in myHTML.html_mode (Syntax.string_of_term ctxt') t end
+    in Print_Mode.setmp ["Latex"] (Latex.output_ascii o Syntax.string_of_term ctxt') t end
+
+(*fun html_string_of_term ctxt t =
+    let
+      val ctxt' = ctxt |> Config.put show_markup false
+                       |> Config.put show_question_marks false
+    in myHTML.html_mode (Syntax.string_of_term ctxt') t end*)
 
 fun string_of_typ ctxt ty =
     let
@@ -531,6 +540,19 @@ fun dest_object_equation thm =
 
 fun rhs_is_trivial (_, rhs) =
     is_equal (Term_Ord.term_ord (@{const "True"}, rhs))
+
+fun normalise_term ctxt simps term =
+  let val ctxt = ctxt |> Context.Proof
+                      |> Simplifier.map_ss (fn simpset => simpset addsimps simps)
+                      |> Context.the_proof
+  in
+    term
+    |> Thm.cterm_of ctxt
+    |> Simplifier.rewrite ctxt
+    |> Thm.full_prop_of
+    |> snd o Logic.dest_equals
+    handle THM _ => term
+  end
 
 fun lhs_in_rhs thy (lhs, rhs) =
   let val (lhs, rhs) = if exists_subterm is_Var lhs orelse
@@ -746,9 +768,9 @@ fun binomial_coefficient n k =
       let val k = if k > n - k then n - k
                   else k
           val n_k = n - k
-          val c = Rat.one
-      in (c, 1 upto k) |> Library.foldl (fn (c, i) => Rat.mult c (Rat.rat_of_quotient (n_k + i, i)))
-                       |> (fst o Rat.quotient_of_rat)
+          val c = Rat.of_int 1
+      in (c, 1 upto k) |> Library.foldl (fn (c, i) => Rat.mult c (Rat.make (n_k + i, i)))
+                       |> (fst o Rat.dest)
       end
 
 fun choose set k x =
@@ -839,6 +861,21 @@ fun arrangements i s =
       (0, binomial_coefficient (length s) i - 1)
       |> from_to
       |> Seq.maps (all_permutations o choose s i)
+
+(* Fixpoint techniques to count terms *)
+
+fun dfs stack goal successors =
+  let fun bfs_aux stack =
+        case stack of
+          state :: stack => if goal state
+                            then SOME (state, stack)
+                            else state |> successors
+                                       |> (fn new => new @ stack)
+                                       |> bfs_aux
+       | [] => NONE
+  in bfs_aux stack end
+
+(* Fixpoint techniques to count terms *)
 
 (*  (op @) (e, [x1, ..., xn])  ===>  ((e @ x1) @ x2) ... @ xn
     for operators that associate to the left (TAIL RECURSIVE)*)
@@ -969,14 +1006,14 @@ fun numeral_of_nat ctxt i =
       [s] => s |> (map Char.toString) o String.explode
                |> read_int
                |> fst
-               |> Rat.rat_of_int
+               |> Rat.of_int
     | [_, s] => (s |> (map Char.toString) o String.explode
                    |> read_int
                    |> fst
                    |> (fn x => ~ x)
-                   |> Rat.rat_of_int)
+                   |> Rat.of_int)
     | _ => (case t of
-            (_ $ p $ q) => Rat.rat_of_quotient (int_of_numeral p, factor_of_numeral q)
+            (_ $ p $ q) => Rat.make (int_of_numeral p, factor_of_numeral q)
           | _ => (tracing (Syntax.string_of_term @{context} t); raise ERROR "Malformed numeral!"))
   end
 
@@ -1173,7 +1210,7 @@ fun rules_in_simpset ts =
 (* Antiquotation parsing metavariables *)
 val typ_pat_setup = 
     let
-      val parser = Args.context -- Scan.lift Args.name_inner_syntax
+      val parser = Args.context -- Scan.lift Args.embedded_inner_syntax
       fun typ_pat (ctxt, str) = 
         let val ctxt' = Proof_Context.set_mode Proof_Context.mode_schematic ctxt
         in str |> Syntax.read_typ ctxt'
@@ -1188,7 +1225,7 @@ val _ = Context.>> (Context.map_theory typ_pat_setup)
 
 val term_pat_setup =
 let
-  val parser = Args.context -- Scan.lift Args.name_inner_syntax
+  val parser = Args.context -- Scan.lift Args.embedded_inner_syntax
   fun term_pat (ctxt, str) =
      str |> Proof_Context.read_term_pattern ctxt
          |> ML_Syntax.print_term

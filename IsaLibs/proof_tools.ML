@@ -43,18 +43,18 @@ fun normalise_thm ctxt simps thm =
                     |> Config.get ctxt
                     |> Time.fromSeconds
   in
-    TimeLimit.timeLimit limit
+    Timeout.apply limit
     (simplify ctxt) thm
-    handle TimeLimit.TimeOut => (if File.exists path
+    handle Timeout.TIMEOUT t => (if File.exists path
                                  then ()
                                  else Utils.create_log path;
                        Utils.trace_log path ("Timeout in :" ^ Utils.str_of_thms [thm]);
-                       raise TimeLimit.TimeOut)
+                       raise Timeout.TIMEOUT t)
          | unknown => (if File.exists path
                        then ()
                        else Utils.create_log path;
                        Utils.trace_log path ("Unknown: " ^ Utils.str_of_thms [thm]);
-                       reraise unknown)
+                       raise unknown)
   end
 
 fun normalise_thm_empty_simpset ctxt simps thm =
@@ -66,13 +66,13 @@ fun normalise_thm_empty_simpset ctxt simps thm =
                        |> Simplifier.map_ss (fn simpset => simpset addsimps simps)
                        |> Context.the_proof
   in
-    TimeLimit.timeLimit limit
+    Timeout.apply limit
     (simplify ctxt) thm
-    handle TimeLimit.TimeOut => (if File.exists path
+    handle Timeout.TIMEOUT t => (if File.exists path
                                  then ()
                                  else Utils.create_log path;
                        Utils.trace_log path ("Timeout in :" ^ Utils.str_of_thms [thm]);
-                       raise TimeLimit.TimeOut)
+                       raise Timeout.TIMEOUT t)
          | unknown => (if File.exists path
                        then ()
                        else Utils.create_log path;

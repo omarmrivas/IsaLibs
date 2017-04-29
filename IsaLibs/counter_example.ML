@@ -215,27 +215,6 @@ fun unfalsified_conjecture ctxt timeOut conjecture =
   then NONE
   else SOME conjecture
 
-fun preprocess_conjecture ctxt size n conjecture =
-  let val conjecture =
-            ([] |> Term.add_tfrees conjecture
-                |> map (fn f => (TFree f, @{typ "int"}))
-                |> subst_atomic_types) conjecture
-(*      val frees = Term.add_frees conjecture []
-      val conjecture = [(conjecture, [])] |> Quickcheck_Common.instantiate_goals ctxt frees
-                                          |> fst o snd o snd o split_last o hd*)
-      val typs = [] |> Term.add_frees conjecture
-                    |> map snd
-                    |> Type_Tab.make_set
-                    |> Type_Tab.dest
-                    |> map fst
-      val thy = Proof_Context.theory_of ctxt
-      val ts = typs |> map (fn ty => 
-                  let val ts = (1 upto n)
-                                |> map_filter (fn _ => Random_Terms.random_term ctxt size ty)
-                                |> Utils.make_term_set thy
-                  in (ty, ts) end)
-  in (Type_Tab.make ts, conjecture) end
-
 fun preprocess_counter_example ctxt size n table timeOut conjecture =
   let val thy = Proof_Context.theory_of ctxt
       val frees = Term.add_frees conjecture []

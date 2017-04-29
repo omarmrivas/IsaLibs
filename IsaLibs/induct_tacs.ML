@@ -216,7 +216,7 @@ fun ind_auto_tac ctxt =
     SOLVE ((CHANGED o ALLGOALS)
        (SUBGOAL ((primitive_induction ctxt) THEN' (TRY' (check_fail_proof_state sts ctxt)))))*)
 
-fun ind_auto_tac' sts ctxt =
+fun ind_auto_failure sts ctxt =
     SOLVE ((CHANGED o ALLGOALS)
        ((SUBGOAL (primitive_induction ctxt)) THEN'
         (TRY' (SUBGOAL(check_fail_proof_state sts ctxt)))))
@@ -346,17 +346,41 @@ val _ = Context.>> (Context.map_theory method_setup_breadth_first)
 
 datatype result = Theorem of thm | Failure of term list
     
-fun inductive_prover ctxt tactic prop =
-  let val failures = Unsynchronized.ref (Net.empty : term Net.net)
-  in
-  ((K (tactic failures ctxt))
-    |> Goal.prove ctxt [] [] prop)
-    |> Theorem
-  handle ERROR _ => (!failures)
-                      |> Net.content
-(*                      |> tap (map (tracing o Syntax.string_of_term ctxt))*)
-                      |> Failure
-  end
+fun inductive_prover ctxt tactic timeOut prop =
+  let val thy = Proof_Context.theory_of ctxt
+      fun add_subgoals subgoals [] = subgoals
+        | add_subgoals subgoals (s::sbs) = insert (fn (x,y) => x = y) s subgoals
+      fun try_prove simps conj =
+        let val failures = Unsynchronized.ref (Net.empty : term Net.net)
+        in case Prover.prove_from_tactic ctxt (SOME simps) (tactic failures) conj timeOut of
+          SOME thm => Theorem thm
+        | NONE => (!failures) |> Net.content
+                              |> Failure
+        end
+      fun recursive_prover subgoals lemmas conj =
+        case try_prove lemmas conj of
+          Theorem thm => (case subgoals of
+                          goal :: subgoals => recursive_prover subgoals (thm::lemmas) goal
+                        | [] => SOME (thm :: lemmas))
+        | Failure trms =>
+            let val eqs_from_goals =
+                    trms |> maps (Utils.equations thy)
+                         |> Utils.make_term_set' thy
+                         |> map (Utils.orient_eq thy LESS)
+                         |> Utils.make_term_set' thy
+                         |> map HOLogic.mk_Trueprop
+                         |> filter (not o Counter_Example.counter_example ctxt timeOut)
+                         |> filter (fn eq => eq <> conj)
+                         |> tap (fn _ => tracing "Equations: ")
+                         |> tap (tracing o Utils.str_of_terms ctxt)
+                val pending = filter (not o member (fn (x,y) => x=y) subgoals) eqs_from_goals
+            in case pending of
+                goal :: subgoals' => recursive_prover (subgoals' @ [conj] @ subgoals) lemmas goal
+              | [] => case subgoals of
+                        goal :: subgoals => recursive_prover subgoals lemmas goal
+                      | [] => NONE
+            end
+  in recursive_prover [] [] prop end
 
 end
 

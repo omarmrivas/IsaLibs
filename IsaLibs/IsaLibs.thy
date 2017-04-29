@@ -22,9 +22,9 @@ ML_file "counting_terms.ML"
 ML_file "enumerated_terms.ML"
 ML_file "aprove.ML"
 ML_file "prover.ML"
+ML_file "ground_completion.ML"
 ML_file "induct_tacs4.ML"
 ML_file "induct_tacs.ML"
-ML_file "ground_completion.ML"
 ML_file "proof_tools.ML"
 ML_file "commands.ML"
 ML_file "oriented_rules.ML"
@@ -48,16 +48,42 @@ ML {*
 *}
 
 ML {*
-  case DB_InductiveTacs.inductive_prover @{context} DB_InductiveTacs.ind_auto_tac' @{prop "suma x y = suma y x"} of
-    DB_InductiveTacs.Theorem thm  => [tracing "proved"]
-  | DB_InductiveTacs.Failure trms => 
-      let val _ = tracing "Failures:"
-          val _ = map (tracing o Syntax.string_of_term @{context}) trms
-          val gs = Utils.generalizations @{theory} 2 trms
-          val _ = tracing "Generalizations:"
-          val _ = map (tracing o Syntax.string_of_term @{context}) gs
-      in [] end
+  case DB_InductiveTacs.inductive_prover @{context} DB_InductiveTacs.ind_auto_failure 10 @{prop "suma x y = suma y x"} of
+    SOME thms  => tracing ("proved " ^ Utils.str_of_thms thms)
+  | NONE => tracing "NONE"
 *}
+  
+  (*
+Proving: suma x y = suma y x 
+Testing conjecture with Quickcheck-exhaustive... 
+Nitpicking formula... 
+Nitpick found no counterexample 
+Equations:  
+suma y zero = y 
+Proving: suma y zero = y 
+Proved!: suma y zero = y 
+Proving: suma x y = suma y x 
+Testing conjecture with Quickcheck-exhaustive... 
+Nitpicking formula... 
+Nitpick found no counterexample 
+Testing conjecture with Quickcheck-exhaustive... 
+Nitpicking formula... 
+Nitpick found no counterexample 
+Testing conjecture with Quickcheck-exhaustive... 
+Nitpicking formula... 
+Nitpick found no counterexample 
+Equations:  
+suma x y = suma y x, suma y (suc x) = suc (suma y x), suma y (suc x) = suc (suma x y) 
+Proving: suma x y = suma y x 
+Testing conjecture with Quickcheck-exhaustive... 
+Nitpicking formula... 
+Nitpick found no counterexample 
+Testing conjecture with Quickcheck-exhaustive... 
+Nitpicking formula... 
+Nitpick found no counterexample 
+Testing conjecture with Quickcheck-exhaustive... 
+Nitpicking formula...
+*)
   
 ML {*
   val temp = Unsynchronized.ref (Net.empty : term Net.net)

@@ -16,6 +16,8 @@ sig
 
   val  cheat_prover : Proof.context -> term -> thm
   val induct_auto_method : Proof.context -> Method.text_range
+  val prove_from_tactic:  local_theory -> thm list option -> (Proof.context -> tactic) ->
+                          term -> int -> thm option
 end
 
 structure DB_Prover
@@ -43,12 +45,12 @@ fun prove_from_method ctxt0 (SOME simps) method conjecture =
                        |> Simplifier.map_ss (fn simpset => simpset addsimps simps)
                        |> Context.the_proof*)
 (*                       |> tap (fn _ => tracing ("Using: " ^ Utils.str_of_thms simps))*)
-      (*val ctxt = put_simpset HOL_basic_ss ctxt0 addsimps simps*)
+(*      val ctxt = put_simpset HOL_basic_ss ctxt0 addsimps simps*)
   in prove_from_method ctxt NONE method conjecture end
 | prove_from_method ctxt0 NONE method conjecture =
   let val frees = [] |> Term.add_frees conjecture |> map fst
       val _ = tracing ("Proving: " ^ (Syntax.string_of_term ctxt0 conjecture))
-  in Utils.safe_eval "" NONE
+  in Utils.safe_eval "Not Proved!" NONE
      (fn ctxt0 =>
       ctxt0|> Variable.add_fixes frees
            |> snd
@@ -70,7 +72,7 @@ fun prove_from_method ctxt0 (SOME simps) method conjecture =
                                |> hd
                                |> Drule.zero_var_indexes)
                         |> tap (fn _ => tracing ("Proved!: " ^ Syntax.string_of_term ctxt conjecture))
-                  else NONE)) ctxt0
+                  else (tracing ("Not proved!"); NONE))) ctxt0
       end
 
 fun prove_from_spass ctxt0 args conjecture = 
@@ -87,6 +89,9 @@ fun prove ctxt args method conjecture timeOut =
           in prove' ctxt args method conjecture timeOut end
      else prove' ctxt args method conjecture timeOut
   end
+
+fun prove_from_tactic ctxt args tactic conjecture timeOut = 
+  prove ctxt args (Method.Basic (fn ctxt => SIMPLE_METHOD (tactic ctxt)), Position.no_range) conjecture timeOut
 
 fun cheat_prover ctxt prop =
   (K (Skip_Proof.cheat_tac ctxt 1))

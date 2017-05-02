@@ -40,10 +40,12 @@ sig
   val binder_elimination : string -> term list -> term -> term * term list
   val fold_subterms      :  (term -> 'a -> 'a) -> term -> 'a -> 'a
   val fold_subterms_no_loose      :  (term -> 'a -> 'a) -> term -> 'a -> 'a
+  val subterms_no_loose_no_funs :term -> term list
   val subterms           : term -> term list
   val subterms_no_loose  : term -> term list
   val make_term_set      : theory -> term list -> term list
   val make_term_set'     : theory -> term list -> term list
+  val sort_by_general    : theory -> term list -> term list
   val make_theorem_set   : thm list -> thm list
   val generalizations    : theory -> int -> term list -> term list
   val generalizations'   : theory -> int -> term list -> term list
@@ -61,6 +63,7 @@ sig
   val swap_eq            : term -> term
   val permutative_eq     : term * term -> bool
   val permutative_rule           : thm -> bool
+  val order_ints_raw             : term -> int list
   val equations                  : theory -> term -> term list
   val ac_orient                  : order -> term -> term
   val not_constructor            : theory -> term -> bool
@@ -254,6 +257,15 @@ fun subterms_no_loose term =
          |> Net.content
   end
 
+fun subterms_no_loose_no_funs term =
+  let val net = Net.empty
+  in net |> fold_subterms_no_loose (fn t => fn net =>
+            if (null o binder_types o type_of) t
+            then Net.insert_term_safe (is_equal o Term_Ord.fast_term_ord) (t, t) net
+            else net) term
+         |> Net.content
+  end
+
 fun full_map_aterms f (t $ u) = 
   (case (f (t $ u)) of 
     SOME tu => tu 
@@ -282,6 +294,18 @@ fun make_term_set' thy terms =
         |> make_term_set thy
         |> map (Logic.unvarify_global o Term_Subst.zero_var_indexes)
         |> sort (int_ord o (apply2 size_of_term))
+
+fun sort_by_general thy terms =
+  let fun ord (s, t) =
+        case (Pattern.matches thy (s, t), Pattern.matches thy (t, s)) of
+          (false, true) => GREATER
+        | (true, false) => LESS
+        | _ => (int_ord o (apply2 size_of_term)) (s, t)
+  in terms |> map_index (fn (i, t) => t |> Logic.varify_global
+                                        |> Logic.incr_indexes ([], [], i))
+           |> sort ord
+           |> map (Logic.unvarify_global o Term_Subst.zero_var_indexes)
+  end
 
 fun make_theorem_set thms =
   thms |> zero_var_indexes_list
@@ -725,9 +749,9 @@ fun generalizations' thy max_generalizations terms =
 
 fun generalizations thy max_generalizations terms =
   terms |> maps subterms_no_loose
-        |> make_term_set' thy
+        |> make_term_set thy
         |> maps ((generalizations' thy max_generalizations) o single)
-        |> make_term_set' thy
+        |> make_term_set thy
 
 (* Others *)
 
@@ -791,6 +815,9 @@ fun choose set k x =
     end
 
 fun lazy_one_of_each LL =
+  if null LL
+  then fn () => NONE
+  else
     let val sizes = map length LL
         val foo = exists (fn n => n = 0) sizes
         val state = (1 upto (length LL - 1))

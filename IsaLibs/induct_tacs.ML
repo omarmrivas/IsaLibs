@@ -345,40 +345,79 @@ val _ = Context.>> (Context.map_theory method_setup_dep_first)
 val _ = Context.>> (Context.map_theory method_setup_breadth_first)
 
 datatype result = Theorem of thm | Failure of term list
+
+val tracing = Utils.trace_log (Path.explode "salida.txt")
     
 fun inductive_prover ctxt tactic timeOut prop =
   let val thy = Proof_Context.theory_of ctxt
-      fun add_subgoals subgoals [] = subgoals
-        | add_subgoals subgoals (s::sbs) = insert (fn (x,y) => x = y) s subgoals
+      val size = 5
+      val n = 100
+      val gn = 2
+      val (table, typsub) =
+          DB_EQ_Terms.preprocess_conjecture ctxt size n prop
+(*      val _ = tracing ("Substitutions: " ^string_of_int (length tsubsts))*)
       fun try_prove simps conj =
         let val failures = Unsynchronized.ref (Net.empty : term Net.net)
+            val _ = tracing ("Proving: " ^ Utils.str_of_terms ctxt [conj])
         in case Prover.prove_from_tactic ctxt (SOME simps) (tactic failures) conj timeOut of
-          SOME thm => Theorem thm
+          SOME thm => (tracing ("Proved!: " ^ Utils.str_of_terms ctxt [conj]);Theorem thm)
         | NONE => (!failures) |> Net.content
                               |> Failure
         end
+      fun orient NONE = NONE
+        | orient (SOME eq) =
+            let val eq' = HOLogic.dest_Trueprop eq
+            in if Utils.definitional_orientation thy eq'
+               then SOME eq
+               else SOME ((HOLogic.mk_Trueprop o HOLogic.mk_eq o swap o HOLogic.dest_eq) eq')
+            end
       fun recursive_prover subgoals lemmas conj =
         case try_prove lemmas conj of
           Theorem thm => (case subgoals of
                           goal :: subgoals => recursive_prover subgoals (thm::lemmas) goal
                         | [] => SOME (thm :: lemmas))
         | Failure trms =>
-            let val eqs_from_goals =
+            let val subgoals' = (conj::subgoals) |> map (fn goal =>
+                                        goal |> Logic.varify_global
+                                             |> Term_Subst.zero_var_indexes)
+                fun better eq =
+                    let val eq' = (HOLogic.mk_Trueprop o Utils.swap_eq o HOLogic.dest_Trueprop) eq
+                    in forall (fn goal => not (Pattern.matches thy (goal, eq))) subgoals' andalso 
+                       forall (fn goal => not (Pattern.matches thy (goal, eq'))) subgoals' end
+                val _ = tracing "Failures"
+                val _ = tracing (Utils.str_of_terms ctxt trms)
+                val _ = tracing "Subgoals"
+                val _ = tracing (Utils.str_of_terms ctxt (conj::subgoals))
+                val eq_from_goals =
                     trms |> maps (Utils.equations thy)
                          |> Utils.make_term_set' thy
                          |> map (Utils.orient_eq thy LESS)
                          |> Utils.make_term_set' thy
                          |> map HOLogic.mk_Trueprop
-                         |> filter (not o Counter_Example.counter_example ctxt timeOut)
-                         |> filter (fn eq => eq <> conj)
-                         |> tap (fn _ => tracing "Equations: ")
+                         |> filter better
+                         |> Utils.sort_by_general thy
+                         |> tap (fn _ => tracing "Equations")
                          |> tap (tracing o Utils.str_of_terms ctxt)
-                val pending = filter (not o member (fn (x,y) => x=y) subgoals) eqs_from_goals
-            in case pending of
-                goal :: subgoals' => recursive_prover (subgoals' @ [conj] @ subgoals) lemmas goal
-              | [] => case subgoals of
-                        goal :: subgoals => recursive_prover subgoals lemmas goal
-                      | [] => NONE
+                         |> tap (fn _ => tracing "#Equations")
+                         |> find_first (not o Counter_Example.counter_example ctxt timeOut)
+                         |> orient
+                val generalisation =
+                    (conj::subgoals) @ trms
+                         |> Utils.generalizations thy gn
+                         |> Utils.sort_by_general thy
+                         |> tap (fn _ => tracing "Generalizations")
+                         |> tap (tracing o Utils.str_of_terms ctxt)
+                         |> tap (fn _ => tracing "#Generalizations")
+                         |> DB_EQ_Terms.equation ctxt timeOut size n table typsub lemmas subgoals' eq_from_goals lemmas
+                         |> orient
+            in case (generalisation, eq_from_goals) of
+                  (SOME gen, SOME eq) => 
+                        [gen, eq]
+                          |> Utils.minby (list_ord int_ord) (Utils.order_ints_raw o HOLogic.dest_Trueprop)
+                          |> recursive_prover (conj :: subgoals) lemmas
+                | (SOME gen, NONE) => recursive_prover (conj :: subgoals) lemmas gen
+                | (NONE, SOME eq) => recursive_prover (conj :: subgoals) lemmas eq
+                | (NONE, NONE) => NONE
             end
   in recursive_prover [] [] prop end
 

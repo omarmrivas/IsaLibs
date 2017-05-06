@@ -645,8 +645,7 @@ fun bad_equation thy eq =
   top_symbol_constructor thy eq orelse
   (* Vars in RHS not present in LHS *)
   vars_in_rhs_not_in_lhs eq orelse
-  top_symbol_in_deps thy eq orelse
-  false
+  top_symbol_in_deps thy eq
 
 fun bad_equation' thy eq =
   let val eq' = if can (HOLogic.dest_eq o HOLogic.dest_Trueprop) eq

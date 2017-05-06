@@ -346,13 +346,42 @@ val _ = Context.>> (Context.map_theory method_setup_breadth_first)
 
 datatype result = Theorem of thm | Failure of term list
 
-val tracing = Utils.trace_log (Path.explode "salida.txt")
-    
-fun inductive_prover ctxt tactic timeOut prop =
+(*fun equation_from_subgoals ctxt timeOut failures subsumed =*)
+fun equation_from_subgoals ctxt size n table typsub failures subsumed =
   let val thy = Proof_Context.theory_of ctxt
+  in
+  failures |> maps (Utils.equations thy)
+           |> map (Utils.orient_eq thy LESS)
+           |> Utils.make_term_set' thy
+           |> map HOLogic.mk_Trueprop
+           |> filter (not o subsumed)
+           |> Utils.sort_by_general thy
+(*         |> tap (fn _ => tracing "Equations")
+           |> tap (tracing o Utils.str_of_terms ctxt)
+           |> tap (fn _ => tracing "#Equations")*)
+           |> find_first (not o EQ_Terms.counter_example ctxt size n table typsub)
+(*           |> find_first (not o Counter_Example.counter_example ctxt timeOut)*)
+  end
+
+fun generalized_eq ctxt timeOut size n gn table typsub lemmas subsumed failures subgoals =
+  let val thy =  Proof_Context.theory_of ctxt
+  in
+    subgoals @ failures
+      |> Utils.generalizations thy gn
+      |> Utils.sort_by_general thy
+(*      |> tap (fn _ => tracing "Generalizations")
+      |> tap (tracing o Utils.str_of_terms ctxt)
+      |> tap (fn _ => tracing "#Generalizations")*)
+      |> EQ_Terms.equation ctxt timeOut size n table typsub lemmas subsumed
+  end
+
+fun inductive_prover log_file ctxt tactic timeOut prop =
+  let val start = Timing.start ()
+      val tracing = Utils.trace_log (Path.explode log_file)
+      val thy = Proof_Context.theory_of ctxt
       val size = 5
       val n = 100
-      val gn = 2
+      val gn = 3
       val (table, typsub) =
           DB_EQ_Terms.preprocess_conjecture ctxt size n prop
 (*      val _ = tracing ("Substitutions: " ^string_of_int (length tsubsts))*)
@@ -364,62 +393,51 @@ fun inductive_prover ctxt tactic timeOut prop =
         | NONE => (!failures) |> Net.content
                               |> Failure
         end
-      fun orient NONE = NONE
-        | orient (SOME eq) =
+      fun orient eq =
             let val eq' = HOLogic.dest_Trueprop eq
-            in if Utils.definitional_orientation thy eq'
-               then SOME eq
-               else SOME ((HOLogic.mk_Trueprop o HOLogic.mk_eq o swap o HOLogic.dest_eq) eq')
+            in if Utils.definitional_orientation thy eq' andalso
+                  not (Utils.bad_equation' thy eq')
+               then eq
+               else ((HOLogic.mk_Trueprop o HOLogic.mk_eq o swap o HOLogic.dest_eq) eq')
             end
-      fun recursive_prover subgoals lemmas conj =
+      fun add_term_to_net net t =
+          t |> Logic.varify_global
+            |> Term_Subst.zero_var_indexes
+            |> (fn t => Net.insert_term_safe (Pattern.equiv thy) (t, t) net)
+      fun add_thm_to_net net thm =
+            thm |> Thm.full_prop_of
+                |> (fn t => Net.insert_term_safe (Pattern.equiv thy) (t, t) net)
+      fun subsumed_in_net net t =
+            t |> Net.unify_term net
+              |> exists (fn t' => Pattern.matches thy (t', t))
+      fun recursive_prover net subgoals lemmas conj =
         case try_prove lemmas conj of
           Theorem thm => (case subgoals of
-                          goal :: subgoals => recursive_prover subgoals (thm::lemmas) goal
+                          goal :: subgoals => recursive_prover (add_thm_to_net net thm) subgoals (thm::lemmas) goal
                         | [] => SOME (thm :: lemmas))
         | Failure trms =>
-            let val subgoals' = (conj::subgoals) |> map (fn goal =>
-                                        goal |> Logic.varify_global
-                                             |> Term_Subst.zero_var_indexes)
-                fun better eq =
-                    let val eq' = (HOLogic.mk_Trueprop o Utils.swap_eq o HOLogic.dest_Trueprop) eq
-                    in forall (fn goal => not (Pattern.matches thy (goal, eq))) subgoals' andalso 
-                       forall (fn goal => not (Pattern.matches thy (goal, eq'))) subgoals' end
-                val _ = tracing "Failures"
-                val _ = tracing (Utils.str_of_terms ctxt trms)
-                val _ = tracing "Subgoals"
-                val _ = tracing (Utils.str_of_terms ctxt (conj::subgoals))
+            let val net = add_term_to_net net conj
                 val eq_from_goals =
-                    trms |> maps (Utils.equations thy)
-                         |> Utils.make_term_set' thy
-                         |> map (Utils.orient_eq thy LESS)
-                         |> Utils.make_term_set' thy
-                         |> map HOLogic.mk_Trueprop
-                         |> filter better
-                         |> Utils.sort_by_general thy
-                         |> tap (fn _ => tracing "Equations")
-                         |> tap (tracing o Utils.str_of_terms ctxt)
-                         |> tap (fn _ => tracing "#Equations")
-                         |> find_first (not o Counter_Example.counter_example ctxt timeOut)
-                         |> orient
+                       (subsumed_in_net net)
+                          |> equation_from_subgoals  ctxt size n table typsub trms
+(*                          |> equation_from_subgoals ctxt timeOut trms*)
                 val generalisation =
-                    (conj::subgoals) @ trms
-                         |> Utils.generalizations thy gn
-                         |> Utils.sort_by_general thy
-                         |> tap (fn _ => tracing "Generalizations")
-                         |> tap (tracing o Utils.str_of_terms ctxt)
-                         |> tap (fn _ => tracing "#Generalizations")
-                         |> DB_EQ_Terms.equation ctxt timeOut size n table typsub lemmas subgoals' eq_from_goals lemmas
-                         |> orient
-            in case (generalisation, eq_from_goals) of
-                  (SOME gen, SOME eq) => 
-                        [gen, eq]
-                          |> Utils.minby (list_ord int_ord) (Utils.order_ints_raw o HOLogic.dest_Trueprop)
-                          |> recursive_prover (conj :: subgoals) lemmas
-                | (SOME gen, NONE) => recursive_prover (conj :: subgoals) lemmas gen
-                | (NONE, SOME eq) => recursive_prover (conj :: subgoals) lemmas eq
-                | (NONE, NONE) => NONE
+                       (conj::subgoals)
+                          |> generalized_eq ctxt timeOut size n gn table typsub lemmas (subsumed_in_net net) trms
+                val conjectures = map_filter I [eq_from_goals, generalisation]
+            in if null conjectures
+               then NONE
+               else conjectures
+                      |> map orient
+                      |> Utils.minby (list_ord int_ord) (Utils.order_ints_raw o HOLogic.dest_Trueprop)
+                      |> recursive_prover (add_term_to_net net conj) (conj :: subgoals) lemmas
             end
-  in recursive_prover [] [] prop end
+      val result = recursive_prover Net.empty [] [] prop
+      val elapsed = start |> Timing.result
+                          |> #elapsed
+                          |> Time.toReal
+      val _ = tracing ("Elapsed time: " ^ string_of_real elapsed)
+  in result end
 
 end
 

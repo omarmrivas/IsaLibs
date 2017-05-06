@@ -47,97 +47,27 @@ fun mult where
 "mult (suc x) y = suma (mult x y) y"
 
 ML {*
+  val t = @{prop "suma y (mult y x) = suma y (mult x y)"}
+  val ts = Utils.generalizations @{theory} 3 [t]
+  val ss = Utils.generalizations' @{theory} 3 [t]
+  val _ = tracing "1"
+  val _ = map (tracing o Syntax.string_of_term @{context}) ts
+  val _ = tracing "2"
+  val _ = map (tracing o Syntax.string_of_term @{context}) ss
+*}
+
+ML {*
   val ctxt = @{context} addsimps @{thms "eq_ac"}
-  val prop = @{prop "mult x (suma y z) = suma (mult x y) (mult x z)"}
+(*  val prop = @{prop "mult x (suma y z) = suma (mult x y) (mult x z)"}*)
+(*  val prop = @{prop "mult x (suma zero z) = suma (mult x zero) (mult x z)"}*)
+  val prop = @{prop "mult y x = mult x y"}
   val _ = 
-  case DB_InductiveTacs.inductive_prover ctxt DB_InductiveTacs.ind_auto_failure 20 prop of
+  case DB_InductiveTacs.inductive_prover "natural.txt" ctxt DB_InductiveTacs.ind_auto_failure 20 prop of
     SOME thms  => tracing ("proved " ^ Utils.str_of_thms thms)
   | NONE => tracing "NONE".
 *}
   
 (*
-
-Proving: mult x (suma y z) = suma (mult x y) (mult x z) 
-Failures 
-\<And>y. mult x y = suma (mult x zero) (mult x y), \<And>x y.
-   mult x (suma y z) = suma (mult x y) (mult x z) \<Longrightarrow>
-   suma (suma (mult x y) (mult x z)) (suma y z) =
-   suma (suma (mult x y) y) (suma (mult x z) z), \<And>x ya.
-   mult x (suma y ya) = suma (mult x y) (mult x ya) \<Longrightarrow>
-   suma (suma (mult x y) (mult x ya)) (suma y ya) =
-   suma (suma (mult x y) y) (suma (mult x ya) ya), \<And>y. zero = y, \<And>x.
-   mult x (suma y z) = suma (mult x y) (mult x z) \<Longrightarrow>
-   suma (suma (mult x y) (mult x z)) (suma y z) =
-   suma (suma (mult x y) y) (suma (mult x z) z), mult x (suma y zero) = suma (mult x y) (mult x zero), mult x z = suma (mult x zero) (mult x z) 
-Subgoals 
-mult x (suma y z) = suma (mult x y) (mult x z) 
-Equations 
-zero = y, mult x y = suma (mult x zero) (mult x y), suma (suma (mult x y) y) (suma (mult x z) z) =
-suma (suma (mult x y) (mult x z)) (suma y z) 
-#Equations 
-Testing conjecture with Quickcheck-exhaustive... 
-Testing conjecture with Quickcheck-exhaustive... 
-Nitpicking formula... 
-Nitpick found no counterexample 
-Generalizations 
-x = y, xb = xa, mult x xa, suma y x, suma xa x, suma xa y, suma xa z, suma xa ya, suma xb xa, mult x y = xa, mult x z = xa, mult x xb = xa, xa = suma xb xa, mult x (suma y xa), suma (mult x y) xa, suma (mult x xb) xa, suma (mult x zero) xa, suma (suma xb y) xa, suma xa (mult x y), suma xa (mult x z), suma xa (mult x xb), suma xa (mult x ya), suma xa (mult x zero), suma xa (suma y z), suma xa (suma y ya), suma xa (suma xb z), suma xa (suma xb ya), mult x (suma y z) = xa, mult x (suma y xb) = xa, mult x (suma y ya) = xa, mult x (suma y zero) = xa, suma xb (suma y z) = xa, suma xb (suma y ya) = xa, xa = suma (mult x y) xb, xa = suma (mult x xb) xa, xa = suma (mult x zero) xa, xa = suma xb (mult x z), xa = suma xb (mult x ya), xa = suma xb (mult x zero), suma (mult x y) (mult x xa), suma (mult x xa) (mult x y), suma (mult x xa) (mult x z), suma (suma (mult x y) xb) xa, suma (suma (mult x y) y) xa, suma (suma xb (mult x z)) xa, suma (suma xb (mult x ya)) xa, suma (suma xb y) (suma xa z), suma (suma xb y) (suma xa ya), suma (suma xb xa) (suma y z), suma (suma xb xa) (suma y ya), suma xa (suma (mult x z) z), suma xa (suma (mult x ya) ya), mult x (suma y z) = suma xb xa, mult x (suma y ya) = suma xb xa, mult x (suma y zero) = suma xb xa, mult x y = suma xa (mult x y), mult x z = suma xa (mult x z), mult x xb = suma (mult x y) xa, mult x xb = suma xa (mult x z), mult x xb = suma xa (mult x ya), mult x xb = suma xa (mult x zero), xa = suma (mult x y) (mult x z), xa = suma (mult x y) (mult x xb), xa = suma (mult x y) (mult x ya), xa = suma (mult x y) (mult x zero), xa = suma (suma (mult x y) y) xb, xa = suma xb (suma (mult x z) z), xa = suma xb (suma (mult x ya) ya), suma (suma (mult x y) (mult x z)) xa, suma (suma (mult x y) (mult x ya)) xa, suma (suma (mult x y) y) (suma xa z), suma (suma (mult x y) y) (suma xa ya), suma (suma (mult x y) xa) (suma y z), suma (suma (mult x y) xa) (suma y ya), suma (suma xa (mult x z)) (suma y z), suma (suma xa (mult x ya)) (suma y ya), suma (suma xa y) (suma (mult x z) z), suma (suma xa y) (suma (mult x ya) ya), mult x (suma y z) = suma (mult x y) xa, mult x (suma y z) = suma xa (mult x z), mult x (suma y xb) = suma (mult x y) xa, mult x (suma y xb) = suma xa (mult x xb), mult x (suma y ya) = suma (mult x y) xa, mult x (suma y ya) = suma xa (mult x ya), mult x (suma y zero) = suma (mult x y) xa, mult x (suma y zero) = suma xa (mult x zero), mult x xa = suma (mult x y) (mult x z), mult x xa = suma (mult x y) (mult x xb), mult x xa = suma (mult x y) (mult x ya), mult x y = suma (mult x xa) (mult x y), mult x z = suma (mult x xa) (mult x z), mult x xa = suma (mult x y) (mult x zero), suma (suma (mult x y) (mult x z)) xb = xa, suma (suma (mult x y) (mult x ya)) xb = xa, suma (suma (mult x y) xb) (suma y z) = xa, suma (suma (mult x y) xb) (suma y ya) = xa, suma (suma xb (mult x z)) (suma y z) = xa, suma (suma xb (mult x ya)) (suma y ya) = xa, xa = suma (suma (mult x y) y) (suma xb z), xa = suma (suma (mult x y) y) (suma xb ya), xa = suma (suma xb y) (suma (mult x z) z), xa = suma (suma xb y) (suma (mult x ya) ya), mult x (suma y xa) = suma (mult x y) (mult x xa), suma (suma (mult x y) (mult x z)) (suma y z) = xa, suma (suma (mult x y) (mult x ya)) (suma y ya) = xa, suma xa (suma y z) = suma (suma (mult x y) y) xb, suma xa (suma y z) = suma xb (suma (mult x z) z), suma xa (suma y ya) = suma (suma (mult x y) y) xb, suma xa (suma y ya) = suma xb (suma (mult x ya) ya), xa = suma (suma (mult x y) y) (suma (mult x z) z), xa = suma (suma (mult x y) y) (suma (mult x ya) ya), suma (suma (mult x y) (mult x z)) (suma y z) = suma xb xa, suma (suma (mult x y) (mult x ya)) (suma y ya) = suma xb xa, suma (suma (mult x y) xb) (suma y z) = suma xa (suma xb z), suma (suma (mult x y) xb) (suma y ya) = suma xa (suma xb ya), suma (suma xb (mult x z)) (suma y z) = suma (suma xb y) xa, suma (suma xb (mult x ya)) (suma y ya) = suma (suma xb y) xa, suma (suma xb xa) (suma y z) = suma (suma xb y) (suma xa z), suma (suma xb xa) (suma y ya) = suma (suma xb y) (suma xa ya), suma xa (suma y z) = suma (suma (mult x y) y) (suma xb z), suma xa (suma y z) = suma (suma xb y) (suma (mult x z) z), suma xa (suma y ya) = suma (suma (mult x y) y) (suma xb ya), suma xa (suma y ya) = suma (suma xb y) (suma (mult x ya) ya), suma xa xb = suma (suma (mult x y) y) (suma (mult x z) z), suma xa xb = suma (suma (mult x y) y) (suma (mult x ya) ya), suma (suma (mult x y) (mult x z)) xb = suma (suma (mult x y) y) xa, suma (suma (mult x y) (mult x z)) xb = suma xa (suma (mult x z) z), suma (suma (mult x y) (mult x ya)) xb = suma (suma (mult x y) y) xa, suma (suma (mult x y) (mult x ya)) xb = suma xa (suma (mult x ya) ya), suma (suma (mult x y) xa) xb = suma (suma (mult x y) y) (suma xa z), suma (suma (mult x y) xa) xb = suma (suma (mult x y) y) (suma xa ya), suma (suma (mult x y) xb) (suma y z) = suma (suma (mult x y) y) xa, suma (suma (mult x y) xb) (suma y ya) = suma (suma (mult x y) y) xa, suma (suma xa (mult x z)) xb = suma (suma xa y) (suma (mult x z) z), suma (suma xa (mult x ya)) xb = suma (suma xa y) (suma (mult x ya) ya), suma (suma xb (mult x z)) (suma y z) = suma xa (suma (mult x z) z), suma (suma xb (mult x ya)) (suma y ya) = suma xa (suma (mult x ya) ya), suma xa (suma y z) = suma (suma (mult x y) y) (suma (mult x z) z), suma xa (suma y ya) = suma (suma (mult x y) y) (suma (mult x ya) ya), suma (suma (mult x y) (mult x z)) (suma y z) = suma (suma (mult x y) y) xa, suma (suma (mult x y) (mult x z)) (suma y z) = suma xa (suma (mult x z) z), suma (suma (mult x y) (mult x ya)) (suma y ya) = suma (suma (mult x y) y) xa, suma (suma (mult x y) (mult x ya)) (suma y ya) =
-suma xa (suma (mult x ya) ya), suma (suma (mult x y) xa) (suma y z) = suma (suma (mult x y) y) (suma xa z), suma (suma (mult x y) xa) (suma y ya) =
-suma (suma (mult x y) y) (suma xa ya), suma (suma xa (mult x z)) (suma y z) = suma (suma xa y) (suma (mult x z) z), suma (suma xa (mult x ya)) (suma y ya) =
-suma (suma xa y) (suma (mult x ya) ya), suma (suma (mult x y) (mult x z)) xa =
-suma (suma (mult x y) y) (suma (mult x z) z), suma (suma (mult x y) (mult x ya)) xa =
-suma (suma (mult x y) y) (suma (mult x ya) ya) 
-#Generalizations 
-Testing conjecture with Quickcheck-exhaustive... 
-Nitpicking formula... 
-Nitpick found no counterexample 
-Proving: suma xa y = suma y xa 
-Failures 
-\<And>y. y = suma y zero, \<And>y. suma y zero = y, suma xa zero = xa, y = suma y zero 
-Subgoals 
-suma xa y = suma y xa, mult x (suma y z) = suma (mult x y) (mult x z) 
-Equations 
-suma y zero = y 
-#Equations 
-Testing conjecture with Quickcheck-exhaustive... 
-Nitpicking formula... 
-Nitpick found no counterexample 
-Generalizations 
-x = y, x = xa, y = x, suma y x, suma xa x, suma y x = y, suma xa x = xa, y = suma y x 
-#Generalizations 
-Testing conjecture with Quickcheck-exhaustive... 
-Nitpicking formula... 
-Nitpick found no counterexample 
-Proving: (y = x) = (x = y) 
-Proved!: (y = x) = (x = y) 
-Proving: suma xa y = suma y xa 
-Failures 
-\<And>y. y = suma y zero, y = suma y zero, xa = suma xa zero 
-Subgoals 
-suma xa y = suma y xa, mult x (suma y z) = suma (mult x y) (mult x z) 
-Equations 
-suma y zero = y 
-#Equations 
-Testing conjecture with Quickcheck-exhaustive... 
-Nitpicking formula... 
-Nitpick found no counterexample 
-Generalizations 
-y = x, xa = x, suma y x, suma xa x, y = suma y x, xa = suma xa x 
-#Generalizations 
-Proving: suma y zero = y 
-Proved!: suma y zero = y 
-Proving: suma xa y = suma y xa 
-Failures 
-\<And>x y.
-   suma x y = suma y x \<Longrightarrow> suc (suma y x) = suma y (suc x), \<And>x.
-   suma x xa = suma xa x \<Longrightarrow> suc (suma xa x) = suma xa (suc x), \<And>x.
-   suma x y = suma y x \<Longrightarrow> suc (suma y x) = suma y (suc x) 
-Subgoals 
-suma xa y = suma y xa, mult x (suma y z) = suma (mult x y) (mult x z) 
-Equations 
-suma y (suc x) = suc (suma y x) 
-#Equations 
-Testing conjecture with Quickcheck-exhaustive... 
-Nitpicking formula...
 
 *)  
   

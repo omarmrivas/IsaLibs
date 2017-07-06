@@ -8,10 +8,14 @@
 
 signature RANDOM_TERMS =
 sig
+  val max_lambda_size              : int Config.T
+
   val count_lambda_terms         : typ -> int -> int
   val random_lambda_term         : typ -> int -> term option
   val enumerate_lambda_terms     : typ -> int -> term list
   val enumerate_all_lambda_terms : typ -> int -> term list
+  val lazy_lambda_terms          : typ -> int -> term Seq.seq
+  val lazy_all_lambda_terms      : typ -> int -> term Seq.seq
   val random_datatype            : Proof.context -> int -> typ -> term option
   val random_term                : Proof.context -> int -> typ -> term option
 end
@@ -19,6 +23,8 @@ end
 structure DB_Random_Terms
 (* : RANDOM_TERMS *)
 = struct
+
+val (max_lambda_size, setup_max_lambda_size) = Attrib.config_int @{binding "max_lambda_size"} (K 10)
 
 fun type_cnt Env A =
     Env |> get_first (fn (typ, c) =>
@@ -300,6 +306,112 @@ fun enumerate_all_lambda_terms A s =
     |> maps (enumerate_lambda_terms A)
 
 end
+
+(* Lazy version *)
+
+local
+  fun choose_arg_size (Bis, _) Env s =
+      let val m = length Bis
+          fun semi_fold [] = []
+            | semi_fold (Ss :: list) =
+              let val multipl = if null Ss then 0
+                                else ((1,0), Ss) |> Library.foldl (fn ((m,i), si) => (m * (count_term (nth Bis i) Env si), i + 1))
+                                                 |> fst
+              (* considerar todos los Ss's que tengan a multipl > 0 *)
+              in if 0 < multipl then Ss :: semi_fold list
+                 else semi_fold list end
+      in semi_fold (ndk (s - 1 - m) m) end
+
+(*  fun choose_arg_size (Bis, _) Env s num_arg_terms =
+      let val m = length Bis
+      in ndk (s - 1 - m) m end*)
+
+  fun choose_head_var A Env s =
+      let fun semi_fold _ [] = []
+            | semi_fold num_terms ((Bis, B) :: list) =
+              let val count_head_var = count_head_var_arg_terms (Bis, B) Env s
+                  val num_terms = num_terms + count_head_var
+(*                  val _ = tracing ("count_head_var: " ^ string_of_int count_head_var)*)
+              (* Considerar todos los (Bis, B) cuyos count_head_var sea mayor que 0 *)
+              in ((Bis, B), choose_arg_size (Bis, B) Env s) ::
+                 semi_fold num_terms list
+              end
+      in semi_fold 0 (valid_head_var_type_set A Env) end
+
+  fun gen_var_term A Env =
+      let val tc = (type_cnt Env A - 1)
+      in
+        if type_cnt Env A = 0 then Seq.empty
+        else 0 upto tc
+              |> map (fn rand_num => 
+                    Free ("x." ^ string_of_int (index A Env) ^ "." ^
+                         string_of_int rand_num, A))
+              |> Seq.of_list
+      end
+
+  fun gen_term A Env s =
+      if s < 1 then Seq.empty
+      else if s = 1 then
+        if type_cnt Env A > 0 then gen_var_term A Env
+        else Seq.empty
+      else if arrow_type A then
+        let
+          val total_num_term = count_term A Env s
+        in if total_num_term = 0 then Seq.empty
+           else Seq.append (gen_lam_term (arg_type A) (res_type A) Env s)
+                           (gen_app_term A Env s)
+        end
+      else gen_app_term A Env s
+  and gen_lam_term arg_typ res_typ Env s =
+      let val Env = type_cnt_inc Env arg_typ
+          val name = "x." ^ string_of_int (index arg_typ Env) ^ "." ^
+                     string_of_int (type_cnt Env arg_typ - 1)
+          val bodies = gen_term res_typ Env (s - 1)
+      in Seq.map (fn body => Abs (name, arg_typ, body)) bodies end
+  and gen_app_term A Env s =
+      let val rr = s |> choose_head_var A Env
+                     |> maps (fn ((Bis, B), Sss) => map (fn Ss => ((Bis, B), Ss)) Sss)
+                     |> Seq.of_list
+          fun f1 ((Bis, B), Ss) =
+            let val head_vars = gen_var_term B Env
+                fun exhaust f head_var = 
+                  case f () of
+                    SOME Tis => Library.foldl (fn (t, ti) => t $ ti) (head_var, Tis) ::
+                                exhaust f head_var
+                  | NONE => []
+                val Tis = Ss |> map2 (fn i => fn si => gen_term (nth Bis i) Env si) (0 upto length Ss - 1)
+                             (* This is probably the slow down on lazy lists *)
+                             |> map Seq.list_of
+                             (* This is probably the slow down on lazy lists *)
+            in Seq.maps (Seq.of_list o exhaust (Utils.lazy_one_of_each Tis)) head_vars end
+      in Seq.maps f1 rr end
+
+in
+
+(*fun enumerate_terms A s =
+    s |> gen_term A []
+      |> map (fn t => normalize_closed_term 0 [] [] t)*)
+
+val memoized_lazy_terms_var =
+    Synchronized.var "memoized_lazy_terms"
+                     (IntType_Tab.empty : term Seq.seq IntType_Tab.table)
+
+fun lazy_lambda_terms A s =
+  Utils.memoize_function IntType_Tab.lookup IntType_Tab.update memoized_lazy_terms_var
+  (fn (s, A) => s |> gen_term A []
+                  |> Seq.map (fn t => normalize_closed_term 0 [] [] t)) (s, A)
+
+fun lazy_all_lambda_terms A b =
+  let (*fun next i = Seq.make(fn () => SOME (i, next (i + 1)))*)
+      fun next i = Seq.make(fn () => if i <= b then SOME (i, next (i + 1)) else NONE)
+  in 1 |> next
+       |> Seq.maps (lazy_lambda_terms A)
+  end
+
+end
+
+(* Lazy version *)
+
 
   fun constructors_of_type ctxt typ =
     let val thy = Proof_Context.theory_of ctxt

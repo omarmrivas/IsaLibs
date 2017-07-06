@@ -648,7 +648,7 @@ fun extract_compatible_orders pi component =
                                                         consts |> Term.add_consts u
                                                                |> Term.add_consts v)
                                    |> distinct (fn ((n,_),(m,_)) => n = m)
-                                   |> filter_out (fn (cname, _) => "==" = cname)
+                                   |> filter_out (fn (cname, _) => Const_Names.meta_eq = cname)
                                    |> map Const
       val _ = if length consts > 5
               then tracing ("Constants: " ^ (string_of_int (length consts)))

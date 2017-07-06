@@ -8,6 +8,8 @@ Names for important Pure and HOL constants.
 
 signature UTILS =
 sig
+  val max_time_normalization : int Config.T
+
   (* Printing *)
   val str_of_thms        : thm list -> string
   val str_of_terms       : Proof.context -> term list -> string
@@ -17,7 +19,9 @@ sig
   val html_table         : string -> string list list -> string
   val write_to_file      : string -> string -> unit
   val extract_filename   : string -> string
-  val extract_filename'   : string -> string
+  val extract_filename'  : string -> string
+  val pretty_tyenv       : Proof.context -> (sort * typ) Vartab.table -> unit
+  val pretty_env         : Proof.context -> (typ * term) Vartab.table -> unit
 
   (* Discrete mathematics *)
   val subsets            : 'a list -> 'a list list
@@ -26,7 +30,9 @@ sig
   
   (* Terms *)
   val string_of_term     : Proof.context -> term -> string
+  val string_of_term'    : Proof.context -> term -> string
   val latex_string_of_term     : Proof.context -> term -> string
+  val latex_str_of_thms  : thm list -> string
 (*  val html_string_of_term     : Proof.context -> term -> string*)
   val string_of_typ      : Proof.context -> typ -> string
   val int_of_string      : string -> int
@@ -45,7 +51,10 @@ sig
   val subterms_no_loose  : term -> term list
   val make_term_set      : theory -> term list -> term list
   val make_term_set'     : theory -> term list -> term list
+  val make_term_set_by   : theory -> ('a -> term) -> 'a list -> 'a list
+  val make_term_set_by'   : theory -> ('a -> term) -> 'a list -> 'a list
   val sort_by_general    : theory -> term list -> term list
+  val sort_by_general'   : theory -> ('a -> term) -> 'a list -> 'a list
   val make_theorem_set   : thm list -> thm list
   val generalizations    : theory -> int -> term list -> term list
   val generalizations'   : theory -> int -> term list -> term list
@@ -72,7 +81,9 @@ sig
   val definitional_dependencies  : theory -> ((string * typ) list * term) -> (string * typ) list
   val definitional_orientation   : theory -> term -> bool
   val oriented_rules_var         : unit Term_Tab.table Synchronized.var
+  val schematic_lemmas_var       : unit Term_Tab.table Synchronized.var
   val get_orientation_schemes    : unit -> term list
+  val get_schematic_lemmas       : unit -> term list
   val rules_in_simpset           : term list -> thm list
 
   (* Rewrite rules *)
@@ -98,10 +109,12 @@ sig
   val binomial_coefficient: int -> int -> int
   val choose             : 'a list -> int -> int -> 'a list
   val dfs                : 'a list -> ('a -> bool) -> ('a -> 'a list) -> ('a * 'a list) option
+  val dfs'               : 'a list -> ('a -> bool) -> ('a -> 'a list) -> 'a Seq.seq
   val all_permutations   : 'a list -> 'a list Seq.seq
   val arrangements       : int -> 'a list -> 'a list Seq.seq
   val lazy_one_of_each   : 'a list list -> unit -> 'a list option
   val lazy_subsets       : 'a list -> 'a list Seq.seq
+  val lazy_subsets_of_size : int -> 'a list -> 'a list Seq.seq
   val safe_eval          : string -> 'b -> ('c -> 'b) -> 'c -> 'b
   val parse              : Proof.context -> (Token.T list -> 'a * Token.T list) -> string -> 'a * Token.T list
   val timing_wrapper     : ('a -> 'b) -> 'a -> 'b
@@ -119,6 +132,13 @@ end
 structure DB_Utils
 (* : UTILS *)
 = struct
+
+val (max_time_normalization, setup_max_time_normalization) = Attrib.config_int @{binding "max_time_normalization"} (K 5)
+
+fun str_of_thms thms = 
+  let fun str_of_cterm thy t = Syntax.string_of_term_global thy (Thm.term_of t)
+      fun str_of_thm thy thm = str_of_cterm thy (Thm.cprop_of thm)
+  in commas (map (fn th => str_of_thm (Thm.theory_of_thm th) th) thms) end
 
 (* Exceptions *)
 exception BadPosition of term * int list
@@ -288,6 +308,12 @@ fun make_term_set thy tms =
         Net.insert_term_safe (pattern_equiv thy) (t, t) net)
     |> Net.content
 
+fun make_term_set_by thy by tms =
+  (Net.empty, tms)
+    |> Library.foldl (fn (net, t) =>
+        Net.insert_term_safe (pattern_equiv thy o apply2 by) (by t, t) net)
+    |> Net.content
+
 fun make_term_set' thy terms =
   terms |> map_index (fn (i, t) => t |> Logic.varify_global
                                      |> Logic.incr_indexes ([], [], i))
@@ -295,17 +321,13 @@ fun make_term_set' thy terms =
         |> map (Logic.unvarify_global o Term_Subst.zero_var_indexes)
         |> sort (int_ord o (apply2 size_of_term))
 
-fun sort_by_general thy terms =
-  let fun ord (s, t) =
-        case (Pattern.matches thy (s, t), Pattern.matches thy (t, s)) of
-          (false, true) => GREATER
-        | (true, false) => LESS
-        | _ => (int_ord o (apply2 size_of_term)) (s, t)
-  in terms |> map_index (fn (i, t) => t |> Logic.varify_global
-                                        |> Logic.incr_indexes ([], [], i))
-           |> sort ord
-           |> map (Logic.unvarify_global o Term_Subst.zero_var_indexes)
-  end
+fun make_term_set_by' thy by terms =
+  terms |> map_index (fn (i, t) => (t, t |> by
+                                         |> Logic.varify_global
+                                         |> Logic.incr_indexes ([], [], i)))
+        |> make_term_set_by thy snd
+        |> map fst
+        |> sort (int_ord o (apply2 size_of_term) o (apply2 by))
 
 fun make_theorem_set thms =
   thms |> zero_var_indexes_list
@@ -364,11 +386,24 @@ fun string_of_term ctxt t =
                        |> Config.put show_question_marks false
     in Print_Mode.setmp [] (Syntax.string_of_term ctxt') t end
 
+fun string_of_term' ctxt t =
+    let
+      val ctxt' = ctxt |> Config.put show_markup false
+    in Print_Mode.setmp [] (Syntax.string_of_term ctxt') t end
+
 fun latex_string_of_term ctxt t =
     let
       val ctxt' = ctxt |> Config.put show_markup false
                        |> Config.put show_question_marks false
     in Print_Mode.setmp ["Latex"] (Latex.output_ascii o Syntax.string_of_term ctxt') t end
+
+fun latex_str_of_thms thms =
+  let fun to_str thm =
+         let val ctxt = thm |> Thm.theory_of_thm
+                            |> Context.Theory
+                            |> Context.proof_of
+         in latex_string_of_term ctxt (Thm.full_prop_of thm) end
+  in commas (map to_str thms) end
 
 (*fun html_string_of_term ctxt t =
     let
@@ -459,6 +494,15 @@ fun get_orientation_schemes () =
                      |> Term_Tab.dest
                      |> map fst
 
+val schematic_lemmas_var = Synchronized.var "schematic_lemmas"
+                                          (Term_Tab.empty : unit Term_Tab.table)
+
+fun get_schematic_lemmas () =
+  schematic_lemmas_var |> Synchronized.value
+                       |> Term_Tab.dest
+                       |> map fst
+
+
 fun ac_orient ord eq = 
     let
       val (lhs, rhs) = HOLogic.dest_eq eq in
@@ -509,18 +553,18 @@ fun get_definitional_rewrites thy term =
 fun definitional_orientation thy term =
     let
       val (s, t) = HOLogic.dest_eq term
-      val (f1, f2) = apply2 (fn x => x |> Term.strip_comb |> fst) (s, t)
+      val (f1, f2) = apply2 (fst o Term.strip_comb) (s, t)
       fun obvious_orient (Const _, Abs _) = true
         | obvious_orient (Const _, Var _) = true
         | obvious_orient (Const _, Free _) = true
         | obvious_orient _ = false
       fun is_def_orient (f1, f2) = 
           let val f1_deps = definitional_dependencies thy ([], f1)
-              val (n1, n2) = apply2 (fn f => f |> Term.dest_Const |> fst) (f1, f2)
+              val (n1, n2) = apply2 (fst o Term.dest_Const) (f1, f2)
               val f2_deps = definitional_dependencies thy ([], f2)
           in
-            if is_equal (string_ord (n1,n2)) then false
-            else (exists (is_equal o string_ord o (pair n2)) (f1_deps |> map fst)) orelse
+            if is_equal (string_ord (n1,n2)) then true
+            else (exists (is_equal o string_ord o (pair n2)) (map fst f1_deps)) orelse
                  ((not (null f1_deps)) andalso null f2_deps)
           end
     in is_def_orient (f1, f2) handle TERM _ => (obvious_orient (f1, f2) handle TERM _ => false) end
@@ -566,16 +610,24 @@ fun rhs_is_trivial (_, rhs) =
     is_equal (Term_Ord.term_ord (@{const "True"}, rhs))
 
 fun normalise_term ctxt simps term =
-  let val ctxt = ctxt |> Context.Proof
+  let val ctxt = ctxt addsimps simps
+      val timeOut = Config.get ctxt max_time_normalization
+               (*ctxt |> Context.Proof
                       |> Simplifier.map_ss (fn simpset => simpset addsimps simps)
-                      |> Context.the_proof
+                      |> Context.the_proof*)
   in
-    term
-    |> Thm.cterm_of ctxt
-    |> Simplifier.rewrite ctxt
-    |> Thm.full_prop_of
-    |> snd o Logic.dest_equals
-    handle THM _ => term
+  Timeout.apply (Time.fromSeconds timeOut)
+      (fn term => 
+              term
+                |> Thm.cterm_of ctxt
+                |> Simplifier.rewrite ctxt
+                |> Thm.full_prop_of
+                |> snd o Logic.dest_equals
+                handle THM _ => term
+                     | Timeout.TIMEOUT _ => 
+                          let val _ = tracing ("Timeout normalizing: " ^ Syntax.string_of_term ctxt term)
+                              val _ = tracing ("With: " ^ str_of_thms simps)
+                          in term end) term
   end
 
 fun lhs_in_rhs thy (lhs, rhs) =
@@ -850,10 +902,16 @@ fun from_to (a, b) =
 
 fun lazy_subsets set =
   let val n = length set
-      val n_list = map (fn k => (k, binomial_coefficient n k)) (1 upto n)
-  in n_list |> Seq.of_list
-            |> Seq.maps (fn (k, binomial) => from_to (0, binomial - 1)
+      val n_list = Seq.map (fn k => (k, binomial_coefficient n k)) (from_to (1,n))
+  in n_list |> Seq.maps (fn (k, binomial) => from_to (0, binomial - 1)
                                                 |> Seq.map (fn kk => choose set k kk))
+  end
+
+fun lazy_subsets_of_size i set =
+  let val n = length set
+      val binomial = binomial_coefficient n i
+  in from_to (0, binomial - 1)
+        |> Seq.map (fn kk => choose set i kk)
   end
 
 (* Since we need to find an ordering for a set of n Consts  *)
@@ -900,6 +958,14 @@ fun dfs stack goal successors =
                                        |> bfs_aux
        | [] => NONE
   in bfs_aux stack end
+
+fun dfs' stack goal succesors =
+  let fun next stack = 
+          Seq.make(fn () => 
+              case dfs stack goal succesors of
+                SOME (state, stack) => SOME (state, next stack)
+                | NONE => NONE)
+  in next stack end
 
 (* Fixpoint techniques to count terms *)
 
@@ -1083,11 +1149,6 @@ fun numeral_of_nat ctxt i =
     in numeral p t end*)
 
 local
-structure Thm_List_Tab = Table(type key = thm list val ord = list_ord Thm.thm_ord)
-
-structure TYPMap = Table(
-type key = Term.typ
-val ord  = Term_Ord.typ_ord)
 
 structure VarMap = Table(
 type key = string * int
@@ -1176,14 +1237,60 @@ fun order_ints_raw t =
 
 val rule_int_ord = order_ints_raw o Thm.concl_of
 end
-fun str_of_thms thms = 
-  let fun str_of_cterm thy t = Syntax.string_of_term_global thy (Thm.term_of t)
-      fun str_of_thm thy thm = str_of_cterm thy (Thm.cprop_of thm)
-  in commas (map (fn th => str_of_thm (Thm.theory_of_thm th) th) thms) end
+
+fun sort_by_general thy terms =
+  let fun ord (s, t) =
+        case (Pattern.matches thy (s, t), Pattern.matches thy (t, s)) of
+          (false, true) => GREATER
+        | (true, false) => LESS
+        | _ => (list_ord int_ord o apply2 order_ints_raw) (s,t)
+(*        | _ => (int_ord o (apply2 size_of_term)) (s, t)*)
+  in terms |> map_index (fn (i, t) => t |> Logic.varify_global
+                                        |> Logic.incr_indexes ([], [], i))
+           |> sort ord
+           |> map (Logic.unvarify_global o Term_Subst.zero_var_indexes)
+  end
+
+fun sort_by_general' thy by terms =
+  let fun ord (s, t) =
+        case (Pattern.matches thy (s, t), Pattern.matches thy (t, s)) of
+          (false, true) => GREATER
+        | (true, false) => LESS
+        | _ => (list_ord int_ord o apply2 order_ints_raw) (s,t)
+(*        | _ => (int_ord o (apply2 size_of_term)) (s, t)*)
+  in terms |> map_index (fn (i, t) => (t, t |> by
+                                            |> Logic.varify_global
+                                            |> Logic.incr_indexes ([], [], i)))
+           |> sort (ord o apply2 snd)
+           |> map fst
+  end
 
 fun str_of_terms ctxt terms =
   terms |> map (string_of_term ctxt)
         |> commas
+
+fun pretty_helper aux env =
+  env |> Vartab.dest
+      |> map aux
+      |> map (fn (s1, s2) => Pretty.block [s1, Pretty.str " := ", s2])
+      |> Pretty.enum "," "[" "]"
+      |> Pretty.writeln
+
+fun pretty_tyenv ctxt tyenv =
+let
+  fun get_typs (v, (s, T)) = (TVar (v, s), T)
+  val print = apply2 (Syntax.pretty_typ ctxt)
+in
+  pretty_helper (print o get_typs) tyenv
+end
+
+fun pretty_env ctxt env =
+let
+  fun get_trms (v, (T, t)) = (Var (v, T), t)
+  val print = apply2 (Syntax.pretty_term ctxt)
+in
+  pretty_helper (print o get_trms) env
+end
 
 local 
   fun pretty_cterm ctxt ctrm =

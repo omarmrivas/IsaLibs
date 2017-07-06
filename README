@@ -52,3 +52,8 @@ isabelle jedit -d path_to_IsaLibs_root_file -l IsaLibs your_theory.thy
 
 isabelle build -d /Users/omarmrivas/Programs/IsaLibs/IsaLibs -b IsaLibs
 
+
+- isabelle_build -
+
+./isabelle_build experiments/inductive_proofs3/nat_acc_plus_same.thy IsaLibs ../../../IsaLibs/IsaLibs
+

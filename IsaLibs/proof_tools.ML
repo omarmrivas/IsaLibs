@@ -11,7 +11,7 @@ sig
   val max_depth_in_meta_induction  : int Config.T
   val max_num_generalizations      : int Config.T
   val max_consts_in_generalizations: int Config.T
-  val max_lambda_size              : int Config.T
+(*  val max_lambda_size              : int Config.T*)
   val use_metis                    : bool Config.T
 
   val normalise_thm        :  Proof.context -> thm list -> thm -> thm
@@ -30,7 +30,7 @@ structure DB_Proof_Tools
 val (max_depth_in_meta_induction, setup_max_depth_in_meta_induction) = Attrib.config_int @{binding "max_depth_in_meta_induction"} (K 10)
 val (max_num_generalizations, setup_max_num_generalizations) = Attrib.config_int @{binding "max_num_generalizations"} (K 2)
 val (max_consts_in_generalizations, setup_max_consts_in_generalizations) = Attrib.config_int @{binding "max_consts_in_generalizations"} (K 2)
-val (max_lambda_size, setup_max_lambda_size) = Attrib.config_int @{binding "max_lambda_size"} (K 8)
+(*val (max_lambda_size, setup_max_lambda_size) = Attrib.config_int @{binding "max_lambda_size"} (K 8)*)
 val (use_metis, setup_use_metis) = Attrib.config_bool @{binding "use_metis"} (K true)
 
 val path = Path.explode "proof_tools.log"
@@ -184,7 +184,7 @@ fun construct_sequence goals ctxt thy max_consts counterex_timeout lambda_size l
 fun find_lemmas goals subgoals ctxt thy counterex_timeout lemmas =
   let val num_generalizations = Config.get ctxt max_num_generalizations
       val max_consts = Config.get ctxt max_consts_in_generalizations
-      val lambda_size = Config.get ctxt max_lambda_size
+      val lambda_size = Config.get ctxt Random_Terms.max_lambda_size
       val equations_in_subgoals =
         subgoals |> maps (Utils.equations thy)
                  |> map (Utils.orient_eq thy GREATER)
@@ -289,6 +289,7 @@ fun meta_induction_aux method ctxt thy proof_timeout
           val terminates = Aprove.memoized_terminates ctxt
           val lemmas' = map Utils.obj_to_meta lemmas
           val conjecture' = (Logic.mk_equals o HOLogic.dest_eq o HOLogic.dest_Trueprop) conjecture
+          (* FIXME: only one f_map is not enough for joinability test *)
         in if Ground_Completion.memoized_joinable' ctxt terminates f_map lemmas' conjecture'
          then alpha (i - 1) lemmas conjectures
          else case Prover.prove ctxt (SOME (filter_out test_simp lemmas))

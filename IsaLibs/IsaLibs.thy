@@ -3,13 +3,24 @@ theory IsaLibs
 imports "~~/src/HOL/TPTP/THF_Arith"
 keywords "rec_complete" :: thy_decl and
          "complete" :: thy_goal and
-         "orient_rules" :: thy_decl
+         "orient_rules" :: thy_decl and
+         "schematic_lemma" :: thy_decl
 begin
+  
+ML {*
+  structure PropSchemes = Named_Thms
+  (val name = @{binding "prop_scheme"}
+   val description = "Propositional Schemes")
+*}
+  
 ML_file "$ISABELLE_HOME/src/HOL/TPTP/sledgehammer_tactics.ML"
 (*ML_file "html.ML"*)
 ML_file "const_names.ML"
 ML_file "tables.ML"
 ML_file "utils.ML"
+ML_file "inst_utils.ML"
+ML_file "oriented_rules.ML"
+ML_file "schematic_lemmas.ML"
 ML_file "smt.ML"
 ML_file "latex.ML"
 ML_file "orders.ML"
@@ -24,10 +35,9 @@ ML_file "aprove.ML"
 ML_file "prover.ML"
 ML_file "ground_completion.ML"
 ML_file "induct_tacs4.ML"
-ML_file "induct_tacs.ML"
 ML_file "proof_tools.ML"
+ML_file "induct_tacs.ML"
 ML_file "commands.ML"
-ML_file "oriented_rules.ML"
 ML_file "meta_gp_hol.ML"
 ML_file "exhaust.ML"
 ML_file "gnuplot.ML"
@@ -36,137 +46,13 @@ ML_file "papers/ml_database.ML"
 ML_file "papers/ESWA2016.ML"
 ML_file "papers/rectilinear_crossing.ML"
 
-datatype Nat = zero | suc Nat
+section {* Theorem Attributes *}
   
-fun suma where
-"suma zero y = y"|
-"suma (suc x) y = suc (suma x y)"
-
-fun mult where
-"mult zero y = zero" |
-"mult (suc x) y = suma (mult x y) y"
-
-ML {*
-  val t = @{prop "suma y (mult y x) = suma y (mult x y)"}
-  val ts = Utils.generalizations @{theory} 3 [t]
-  val ss = Utils.generalizations' @{theory} 3 [t]
-  val _ = tracing "1"
-  val _ = map (tracing o Syntax.string_of_term @{context}) ts
-  val _ = tracing "2"
-  val _ = map (tracing o Syntax.string_of_term @{context}) ss
-*}
-
-ML {*
-  val ctxt = @{context} addsimps @{thms "eq_ac"}
-(*  val prop = @{prop "mult x (suma y z) = suma (mult x y) (mult x z)"}*)
-(*  val prop = @{prop "mult x (suma zero z) = suma (mult x zero) (mult x z)"}*)
-  val prop = @{prop "mult y x = mult x y"}
-  val _ = 
-  case DB_InductiveTacs.inductive_prover "natural.txt" ctxt DB_InductiveTacs.ind_auto_failure 20 prop of
-    SOME thms  => tracing ("proved " ^ Utils.str_of_thms thms)
-  | NONE => tracing "NONE".
-*}
+attribute_setup prop_scheme = 
+  {* Attrib.add_del (Thm.declaration_attribute PropSchemes.add_thm) 
+                    (Thm.declaration_attribute PropSchemes.del_thm) *}
+  "maintaining a list of proppositional schemes"
   
-(*
-
-*)  
-  
-ML {*
-  val temp = Unsynchronized.ref (Net.empty : term Net.net)
-  val failures = Unsynchronized.ref (Net.empty : term Net.net)
-*}
-  
-lemma "x + y = y + (x :: nat)"
-(*  apply (tactic {* DB_InductiveTacs.ind_auto_tac @{context} *})*)
-(*  apply (tactic {* DB_InductiveTacs.ind_auto_tac' failures @{context} *})*)
-  apply (tactic {* DB_InductiveTacs.ind_auto_tac'' failures @{context} *})
-    done
-(*  apply (tactic {* DB_InductiveTacs4.induct_auto_tac' temp failures @{context} *})*)
-
-ML {*
-  val s = length (Net.content (!failures))
-  val _ = map (tracing o Syntax.string_of_term @{context}) (Net.content (!failures))
-*}
-    
-  
-
-ML {*
-  val prop = @{prop "2*x \<ge> x \<and> length xs = 12"}
-  val ctxt = @{context}
-  val frees = Term.add_frees prop []
-  val r = Quickcheck_Common.instantiate_goals @{context} frees [(prop, [])]
-  val r = hd r
-  val _ = r |> map (fn (tyop, (t, ts)) =>
-          case tyop of
-            SOME ty => let val typ_str = Syntax.string_of_typ ctxt ty
-                           val t_str = Syntax.string_of_term ctxt t
-                       in tracing ("(" ^ typ_str ^ "," ^ t_str ^ ")") end
-          | NONE => tracing ("(NONE," ^  Syntax.string_of_term ctxt t ^ ")"))
-*}
-  
-ML {*
-  val prop = @{prop "(f::'a\<Rightarrow>'b) x = y"}
-  val tfrees = Term.add_tfrees prop []
-  val inst = map (fn f => (TFree f, @{typ "int"})) tfrees
-  val t = subst_atomic_types inst prop
-  val _ = tracing (Syntax.string_of_term ctxt t)
-*}
-  
-  
-ML {*
-  val (tab, conjecture) = DB_Counter_Example.preprocess_conjecture ctxt 5 5 prop
-  val foo = conjecture |> DB_Counter_Example.preprocess_counter_example ctxt 5 5 tab
-*}
-  
-ML {*
-  val c = Random_Terms.count_lambda_terms @{typ "nat\<Rightarrow>nat\<Rightarrow>nat"} 3
-  val t = Random_Terms.random_term @{context} 6 @{typ "Enum.finite_2"}
-  val _ = tracing (Syntax.string_of_term @{context} (the t))
-*}
-  
-ML {*
-(*  Utils.write_to_file "temporal.txt" (DB_Utils.latex_string_of_term @{context} @{term "x + y < 25"})*)
-  DB_Utils.latex_string_of_term @{context} @{term "x + y < 25"}
-*}
-  
-ML {*
-  val fs = DB_Counting_Terms.surjections ["a", "b", "e"] ["c", "d"]
-  val s = length fs
-  val r = DB_Counting_Terms.equivalent @{typ "(nat\<Rightarrow>nat)\<Rightarrow>real\<Rightarrow>int"} @{typ "real\<Rightarrow>int"}
-  val foo = DB_Counting_Terms.embeddable @{typ "real\<Rightarrow>nat\<Rightarrow>real\<Rightarrow>int"} @{typ "nat\<Rightarrow>real\<Rightarrow>int"}
-  val bar = DB_Counting_Terms.direct_prolongation @{typ "(int\<Rightarrow>real)\<Rightarrow>nat\<Rightarrow>int"} @{typ "(int\<Rightarrow>real)\<Rightarrow>nat\<Rightarrow>int"}
-*}
-
-ML {*
-  val r = DB_Random_Terms.random_datatype @{context} 4 @{typ "nat\<Rightarrow>nat"}
-  val _ = case r of
-            SOME t => tracing (Syntax.string_of_term @{context} t)
-          | NONE => tracing "NONE"
-*}
-
-  
-  
-(*ML_file "$ISABELLE_HOME/src/Tools/Spec_Check/base_generator.ML"
-ML_file "$ISABELLE_HOME/src/Tools/Spec_Check/generator.ML"*)
-
-(*ML {*
-  val l = DB_Counter_Example.quickcheck_terms @{context} 600 500 @{typ "real"}
-  val s = length l
-*}
-
-ML {*
-  map (tracing o Syntax.string_of_term @{context}) l
-*}
-
-lemma "\<not>(x=real_of_rat (Fract 0 1)) \<Longrightarrow> (x::real) = real_of_rat (Fract (- 1) 1)"
-
-
-ML {*
-  val t = @{term "\<not>((\<forall>x. \<not>(P x))\<or>(\<forall>x. Q x))"}
-  val fig = Latex_Utils.latex_tree_with_pos 0.8 3.0 t
-  val _ = Utils.write_to_file "latex.txt" fig
-*}*)
-
 (*lemma eval_Suc_nat [code_post]:
    "Suc 0 = 1"
    "Suc 1 = 2"
@@ -185,12 +71,14 @@ DB_Counter_Example.setup_use_quickcheck #>
 DB_Counter_Example.setup_use_nitpick #>
 DB_Counter_Example.setup_simp_before #>
 DB_Counter_Example.setup_max_time_in_counter_ex #>
+DB_Utils.setup_max_time_normalization #>
+DB_EQ_Terms.setup_max_random_terms #>
 
 DB_Prover.setup_max_time_in_proof #>
 DB_Proof_Tools.setup_max_depth_in_meta_induction #>
 DB_Proof_Tools.setup_max_num_generalizations #>
 DB_Proof_Tools.setup_max_consts_in_generalizations #>
-DB_Proof_Tools.setup_max_lambda_size #>
+DB_Random_Terms.setup_max_lambda_size #>
 DB_Proof_Tools.setup_use_metis #>
 
 DB_Aprove.setup_use_aprove #>
@@ -208,17 +96,19 @@ declare [[
   use_nitpick = false,
   simp_before = false,
   max_time_in_counter_ex = 25,
-  max_time_in_proof = 60,
+  max_time_in_proof = 30,
+  max_time_normalization = 5,
+  max_lambda_size = 5,
+  max_random_terms = 10,
+  max_time_in_termination = 20,
   max_time_in_fitness = 15,
   max_depth_in_meta_induction = 10,
   max_num_generalizations = 3,
   max_consts_in_generalizations = 4,
-  max_lambda_size = 8,
   use_metis = false,
   quickcheck_quiet = true,
   use_aprove=true,
   generate_cps=false,
-  max_time_in_termination = 20,
   linarith_split_limit = 10,
   eta_contract = false
   ]]
@@ -226,9 +116,55 @@ declare [[
 text {* Associative operators must be oriented this way to avoid non-termination
         in case they are also Commutative operators. *}
 orient_rules "?X (?X (?x :: ?'a) (?y :: ?'a)) (?z :: ?'a) = ?X ?x (?X ?y ?z)"
+orient_rules "?X (?X (?x :: ?'a) (?y :: ?'a)) (?z :: ?'a) = ?X ?x (?X ?z ?y)"
+orient_rules "?X (?X (?x :: ?'a) (?y :: ?'a)) (?z :: ?'a) = ?X ?y (?X ?x ?z)"
+orient_rules "?X (?X (?x :: ?'a) (?y :: ?'a)) (?z :: ?'a) = ?X ?y (?X ?z ?x)"
+orient_rules "?X (?X (?x :: ?'a) (?y :: ?'a)) (?z :: ?'a) = ?X ?z (?X ?x ?y)"
+orient_rules "?X (?X (?x :: ?'a) (?y :: ?'a)) (?z :: ?'a) = ?X ?z (?X ?y ?x)"
+  
+definition associativity where
+  [prop_scheme]: "associativity R \<equiv> \<forall>x y z. R (R x y) z = R x (R y z)"
 
+definition commutativity where
+  [prop_scheme]: "commutativity R \<equiv> \<forall>x y. R x y = R y x"
+
+definition sssociativity_commutativity where
+  [prop_scheme]: "sssociativity_commutativity R \<equiv> \<forall>x y z. R x (R y z) = R y (R x z)"
+
+definition left_identity where
+  [prop_scheme]: "left_identity R e \<equiv> \<forall>x. R e x = x"
+  
+definition right_identity where
+  [prop_scheme]: "right_identity R e \<equiv> \<forall>x. R x e = x"
+  
+definition absorbing_element where
+  [prop_scheme]: "absorbing_element R e \<equiv> R e = e"
+  
+definition left_absorbing_element where
+  [prop_scheme]: "left_absorbing_element R e \<equiv> \<forall>x. R e x = e"
+  
+definition right_absorbing_element where
+  [prop_scheme]: "right_absorbing_element R e \<equiv> \<forall>x. R x e = e"
+
+definition idempotent where
+  [prop_scheme]: "idempotent R \<equiv> \<forall>x. R x x = x"
+
+definition distributive where
+  [prop_scheme]: "distributive f g h i \<equiv> \<forall>x y. f (g x y) = h (i x) (i y)"
+  
+definition left_distributive where
+  [prop_scheme]: "left_distributive f g h i \<equiv> \<forall>x y z. f x (g y z) = h (i x y) (i x z)"
+  
+definition right_distributive where
+  [prop_scheme]: "right_distributive f g h i \<equiv> \<forall>x y z. f (g x y) z = h (i x z) (i y z)"
+  
 ML {*
-  val p1 = Multithreading.max_threads_value ()
+  val schematic_lemmas = Utils.get_schematic_lemmas ()
+  val _ = map (tracing  o Syntax.string_of_term @{context}) schematic_lemmas
+*}
+  
+ML {*
+(*  val p1 = Multithreading.max_threads_value ()*)
   val p2 = Thread.numProcessors ()
   val _ = Future.ML_statistics := false
 *}
@@ -320,5 +256,6 @@ ML {*
 /Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/tree_Flatten3.smt2 - tree_Flatten3.thy 
 val it = [(), (), (), (), (), (), (), (), (), (), ...]: unit list
 *)
-
+ 
+  
 end

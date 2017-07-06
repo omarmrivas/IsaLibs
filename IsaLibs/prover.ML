@@ -11,13 +11,16 @@ sig
 
   val max_time_in_proof  : int Config.T
 
-  val prove                        : local_theory -> thm list option -> Method.text_range -> 
-                                     term -> int -> thm option
+  val prove              : local_theory -> thm list option -> Method.text_range -> 
+                           term -> int -> thm option
 
-  val  cheat_prover : Proof.context -> term -> thm
+  val prove_schematic_from_method : Proof.context -> thm list option ->
+                                    Method.text_range -> term -> term option
+
+  val cheat_prover       : Proof.context -> term -> thm
   val induct_auto_method : Proof.context -> Method.text_range
-  val prove_from_tactic:  local_theory -> thm list option -> (Proof.context -> tactic) ->
-                          term -> int -> thm option
+  val prove_from_tactic  : local_theory -> thm list option -> (Proof.context -> tactic) ->
+                           term -> int -> thm option
 end
 
 structure DB_Prover
@@ -39,6 +42,23 @@ val _ = Context.>> (Context.map_theory method_setup)
 fun sledgehammer_method ctxt = Utils.parse ctxt (Method.parser 1) "spass_auto" |> fst
 fun induct_auto_method ctxt = Utils.parse ctxt (Method.parser 1) "induct_auto" |> fst
 
+val long_keyword =
+  Parse_Spec.includes >> K "" ||
+  Parse_Spec.long_statement_keyword;
+
+val long_statement =
+  Scan.optional (Parse_Spec.opt_thm_name ":" --| Scan.ahead long_keyword) Binding.empty_atts --
+  Scan.optional Parse_Spec.includes [] -- Parse_Spec.long_statement
+    >> (fn ((binding, includes), (elems, concl)) => (true, binding, includes, elems, concl));
+
+val short_statement =
+  Parse_Spec.statement -- Parse_Spec.if_statement -- Parse.for_fixes
+    >> (fn ((shows, assumes), fixes) =>
+      (false, Binding.empty_atts, [], [Element.Fixes fixes, Element.Assumes assumes],
+        Element.Shows shows));
+
+fun parse_schematic_goal ctxt = Utils.parse ctxt (long_statement || short_statement)
+
 fun prove_from_method ctxt0 (SOME simps) method conjecture =
   let val ctxt = ctxt0 addsimps simps
       (*val ctxt = ctxt0 |> Context.Proof
@@ -49,7 +69,7 @@ fun prove_from_method ctxt0 (SOME simps) method conjecture =
   in prove_from_method ctxt NONE method conjecture end
 | prove_from_method ctxt0 NONE method conjecture =
   let val frees = [] |> Term.add_frees conjecture |> map fst
-      val _ = tracing ("Proving: " ^ (Syntax.string_of_term ctxt0 conjecture))
+(*      val _ = tracing ("Proving: " ^ (Syntax.string_of_term ctxt0 conjecture))*)
   in Utils.safe_eval "Not Proved!" NONE
      (fn ctxt0 =>
       ctxt0|> Variable.add_fixes frees
@@ -63,16 +83,45 @@ fun prove_from_method ctxt0 (SOME simps) method conjecture =
            (* FIXME: facts should be used in a locale or type class context! *)
            |> (fn ({goal,...},ctxt) => 
                   if 0 = Thm.nprems_of goal 
-                  then SOME (goal
-                               |> Goal.finish ctxt
+                  then goal |> Goal.finish ctxt
 (*                               |> Thm.check_shyps (Variable.sorts_of ctxt)*)
-                               |> Assumption.export false ctxt ctxt0
-                               |> single
-                               |> Variable.export ctxt ctxt0
-                               |> hd
-                               |> Drule.zero_var_indexes)
-                        |> tap (fn _ => tracing ("Proved!: " ^ Syntax.string_of_term ctxt conjecture))
-                  else (tracing ("Not proved!"); NONE))) ctxt0
+                            |> Assumption.export false ctxt ctxt0
+                            |> single
+                            |> Variable.export ctxt ctxt0
+                            |> hd
+                            |> Drule.zero_var_indexes
+(*                            |> tap (fn th => tracing ("Proved!: " ^ Utils.str_of_thms [th]))*)
+                            |> SOME
+                  else ((*tracing ("Not proved!");*) NONE))) ctxt0
+      end
+
+fun prove_schematic_from_method ctxt0 (SOME simps) method conjecture =
+  let val ctxt = ctxt0 addsimps simps
+  in prove_schematic_from_method ctxt NONE method conjecture end
+| prove_schematic_from_method ctxt0 NONE method conjecture =
+  let val (long, binding, includes, elems, concl) = 
+                conjecture |> Utils.string_of_term' ctxt0
+                           |> enclose "\"" "\""
+                           |> parse_schematic_goal ctxt0
+                           |> fst
+      fun dest_conjecture (Const (conj, _) $ _ $ conjecture) =
+            if conj = Const_Names.schematic_and
+            then SOME (HOLogic.mk_Trueprop conjecture)
+            else NONE
+        | dest_conjecture _ = NONE
+  in Utils.safe_eval "" NONE
+     (fn ctxt0 =>
+      ctxt0|> Specification.schematic_theorem_cmd long Thm.theoremK NONE (K I) binding includes elems concl false
+           |> Proof.apply method
+           |> (Seq.hd o Seq.filter_results)
+           |> `Proof.goal
+           ||> Proof.global_done_proof
+           (* FIXME: facts should be used in a locale or type class context! *)
+           |> (fn ({goal,...},_) =>
+                  if 0 = Thm.nprems_of goal
+                    then goal |> Thm.full_prop_of
+                              |> dest_conjecture
+                  else NONE)) ctxt0
       end
 
 fun prove_from_spass ctxt0 args conjecture = 
@@ -89,6 +138,18 @@ fun prove ctxt args method conjecture timeOut =
           in prove' ctxt args method conjecture timeOut end
      else prove' ctxt args method conjecture timeOut
   end
+
+(*fun prove_schematic ctxt args method conjecture timeOut =
+  let fun prove' ctxt args method conjecture timeOut = 
+  (conjecture
+    |> Timeout.apply (Time.fromSeconds timeOut)
+                           (prove_schematic_from_method ctxt args method))
+      handle Timeout.TIMEOUT _ => NONE
+  in if can Local_Theory.target_of ctxt
+     then let val ctxt = Local_Theory.target_of ctxt
+          in prove' ctxt args method conjecture timeOut end
+     else prove' ctxt args method conjecture timeOut
+  end*)
 
 fun prove_from_tactic ctxt args tactic conjecture timeOut = 
   prove ctxt args (Method.Basic (fn ctxt => SIMPLE_METHOD (tactic ctxt)), Position.no_range) conjecture timeOut

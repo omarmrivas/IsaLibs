@@ -38,6 +38,7 @@ sig
   val product_type                     : string
 
   val undefined_name                   : string
+  val schematic_and                    : string
 
 end
 
@@ -78,6 +79,9 @@ val Const (hol_less, _) = @{term "Orderings.ord_class.less"}
 
 (* Partial Functions *)
 val Const (undefined_name, _) = @{term "undefined"}
+
+(* schematic goals *)
+val Const (schematic_and, _) = @{term "op &&&"}
 
 end
 

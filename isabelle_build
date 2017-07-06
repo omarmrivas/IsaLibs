@@ -2,21 +2,40 @@
 #
 
 FILE=$1
-LOGIC=`echo ${FILE%.*}`
+
+INCLUDE_FROM=$2
+INCLUDE_TO=$3
+
+FILE1=`echo ${FILE%.*}`
+LOGIC=`echo ${FILE1##*/}`
+
+# LOGIC=`echo ${FILE%.*}`
 TARGET="HOL"
 # CDIR=`pwd`
-ROOTFILE=experiments/$LOGIC/ROOT
+
+DIR=$(dirname "$FILE")
+
+ROOTFILE=$DIR/$LOGIC/ROOT
 
 # creating the theory directory and isabelle make files
 
 echo "Creating $LOGIC directory..."
-mkdir -p experiments/$LOGIC
+mkdir -p $DIR/$LOGIC
 
 echo "Creating $LOGIC/ROOT..."
 echo "session \"$LOGIC\" = \"$TARGET\" +" > $ROOTFILE
 echo "options [document = false]" >> $ROOTFILE
 echo "theories [document = false]" >> $ROOTFILE
-echo "\"../../$LOGIC\"" >> $ROOTFILE
+echo "\"$LOGIC\"" >> $ROOTFILE
 
-# cp $FILE $LOGIC
-isabelle build -c -v -D experiments/$LOGIC
+echo $FILE
+echo $LOGIC
+echo $DIR
+echo $ROOTFILE
+
+cp $FILE $DIR/$LOGIC
+
+sed -i '.bak' "s|imports $INCLUDE_FROM|imports \"$INCLUDE_TO\"|g" $DIR/$LOGIC/$LOGIC".thy"
+
+#isabelle build -c -v -D $DIR/$LOGIC
+isabelle build -c -v -o browser_info -D $DIR/$LOGIC

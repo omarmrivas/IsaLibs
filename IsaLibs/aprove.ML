@@ -98,21 +98,25 @@ fun terminates ctxt TRS =
         let
           val timeOut =  Config.get ctxt DPair.max_time_in_termination
           val wst = trs_to_wst TRS
+          val timeOut_threads = "-t " ^ (string_of_int timeOut) ^ " -w " ^ (string_of_int (Thread.numProcessors ()))
           val (out, _) = if getenv "ISABELLE_PLATFORM_FAMILY" = "windows"
                          then
                          Isabelle_System.with_tmp_file
                            "aprove" "trs"
                            (fn path => let val path = Path.base path
                                            val _ = File.write path wst
-                                           val result = Isabelle_System.bash_output ("$TIMEAOUT_PATH/timeout -t " ^ (string_of_int timeOut) ^ " java -Xmx512m -jar aprove.jar -m wst " ^ (Path.implode path) ^ " 2> /dev/null")
+                                           val result = Isabelle_System.bash_output ("$TIMEAOUT_PATH/timeout -t " ^ (string_of_int (timeOut+5)) ^ " java -Xmx512m -jar $APROVE_PATH/aprove.jar " ^ timeOut_threads ^ " -m wst " ^ (Path.implode path) ^ " 2> /dev/null")
+(*                                           val result = Isabelle_System.bash_output ("$TIMEAOUT_PATH/timeout -t " ^ (string_of_int (timeOut+5)) ^ " java -Xmx512m -jar $APROVE_PATH/aprove.jar -t " ^ (string_of_int timeOut) ^ " -m wst " ^ (Path.implode path))*)
                                            val _ = File.rm path
                                        in result end)
                          else
                          Isabelle_System.with_tmp_file
                            "aprove" "trs"
                            (fn path => (File.write path wst;
-                                        Isabelle_System.bash_output ("$TIMEAOUT_PATH/timeout -t " ^ (string_of_int timeOut) ^ " java -Xmx512m -jar $APROVE_PATH/aprove.jar -m wst " ^ (Path.implode path) ^ " 2> /dev/null")))
-          val foo = String.isPrefix "YES" out
+(*                                        tracing ("$TIMEAOUT_PATH/timeout -t " ^ (string_of_int (timeOut+5)) ^ " java -Xmx512m -jar $APROVE_PATH/aprove.jar " ^ timeOut_threads ^ " -m wst " ^ (Path.implode path));*)
+(*                                        Isabelle_System.bash_output ("$TIMEAOUT_PATH/timeout -t " ^ (string_of_int (timeOut+5)) ^ " java -Xmx512m -jar $APROVE_PATH/aprove.jar " ^ timeOut_threads ^ " -m wst " ^ (Path.implode path))))*)
+                                        Isabelle_System.bash_output ("$TIMEAOUT_PATH/timeout -t " ^ (string_of_int (timeOut+5)) ^ " java -Xmx512m -jar $APROVE_PATH/aprove.jar " ^ timeOut_threads ^ " -m wst " ^ (Path.implode path) ^ " 2> /dev/null")))
+          val foo = String.isSubstring "YES" out
         in if foo
            then true
            else false
@@ -127,7 +131,10 @@ val memoized_terminates_var = Synchronized.var "memoized_terminates"
 (* getenv "ISABELLE_PLATFORM_FAMILY" *)
 
 fun all_terminates ctxt TRS =
-  Par_List.exists (fn f => f TRS) [DPair.terminates ctxt, terminates ctxt]
+  if DPair.terminates ctxt TRS
+  then true
+  else terminates ctxt TRS
+(*  Par_List.exists (fn f => f TRS) [DPair.terminates ctxt, terminates ctxt]*)
 
 fun memoized_terminates ctxt TRS =
   let val TRS = sort Thm.thm_ord TRS

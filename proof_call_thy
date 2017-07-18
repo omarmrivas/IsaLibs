@@ -5,6 +5,8 @@ FULLFILE=$1
 
 LOGIC=$2
 
+LOGIC_DIR=$3
+
 DIR=$(dirname "$FULLFILE")
 
 FILE=`echo ${FULLFILE%.*}`
@@ -18,4 +20,7 @@ echo $DIR
 cd $DIR
 
 # Calling the isabelle process
- timeout -t 120 isabelle_process -e "use_thy \"$THEORY\";" -q -r $LOGIC
+# timeout -t 120 isabelle_process -e "use_thy \"$THEORY\";" -q -r $LOGIC
+# isabelle process -T nat_acc_plus_same -d /Users/omarmrivas/Programs/IsaLibs/IsaLibs -l IsaLibs
+
+isabelle process -T $THEORY -d $LOGIC_DIR -l $LOGIC

@@ -18,7 +18,7 @@ val smt2_to_isabelle : Proof.context -> bool ->
 
 val smt2bash_to_isabelle : Proof.context ->
       string ->
-        string ->
+        string -> string ->
           string ->
             string list -> (string * (bool * string)) list
 
@@ -541,7 +541,8 @@ fun assert_not_to_isabelle prover (SMTassert (params, vars, conjecture)) =
     let val vars = vars |> map (smt_type_argument_to_isabelle2 params)
                         |> space_implode " "
         val conj = smt_term_to_isabelle params conjecture
-    in "theorem " ^ "\"!! " ^ vars ^ " . " ^ conj ^ "\"\n   " ^ prover end
+    in "theorem " ^ "\"" ^ conj ^ "\"\n   " ^ prover end
+(*    in "theorem " ^ "\"!! " ^ vars ^ " . " ^ conj ^ "\"\n   " ^ prover end*)
 
 fun s_expression_to_isabelle _ (S (Sym "declare-datatypes" :: xs)) =
       (smt_datatype_to_isabelle o smt_datatype_fn) (S (Sym "declare-datatypes" :: xs))
@@ -588,10 +589,14 @@ fun check_fun str =
        String.isSubstring "Failed to parse type" str orelse
        String.isSubstring "occurs on right hand side only" str)
 
-fun test_thy thy_file import =
-    (" ./proof_call_thy " ^ thy_file ^ " " ^ import)
+fun test_thy thy_file import import_dir prover =
+    (" ./proof_call_thy " ^ thy_file ^ " " ^ import ^ " " ^ import_dir ^ " 2>&1")
+      |> tap (fn _ => Isabelle_System.bash_output ("sed -i '.bak' \"s/" ^ prover ^ "/oops/g\" " ^ thy_file))
       |> Isabelle_System.bash_output
+      |> tap (fn _ => Isabelle_System.bash_output ("sed -i '.bak' \"s/oops/" ^ prover ^ "/g\" " ^ thy_file))
       |> fst
+(*      |> tap (fn _ => tracing "SALIDA:")
+      |> tap tracing*)
       |> check_fun
 
 (*fun smt2bash_to_isabelle ctxt destiny import prover smt_files =
@@ -604,7 +609,7 @@ fun test_thy thy_file import =
                             in (ok, name) :: names end)
                    |> map2 (fn smt_file => fn thy_file => (smt_file, thy_file)) smt_files*)
 
-fun smt2bash_to_isabelle ctxt destiny import prover smt_files =
+fun smt2bash_to_isabelle ctxt destiny import import_dir prover smt_files =
    ([], smt_files) |> Library.foldl (fn (names, smt2_file) => 
                             let val thy_name = smt2_file |> Utils.extract_filename'
                                                          |> singleton (Name.variant_list names)
@@ -616,7 +621,7 @@ fun smt2bash_to_isabelle ctxt destiny import prover smt_files =
                                 val ns = smt2_to_isabelle ctxt true destiny import prover names smt_file
                                             handle ERROR x => (tracing ("SMT file: " ^ smt_file); raise (ERROR x))
                                 val name = hd ns
-                                val ok = test_thy (destiny ^ "/" ^ name ^ ".thy") import
+                                val ok = test_thy (destiny ^ "/" ^ name ^ ".thy") import import_dir prover
                                 val _ = smt2_to_isabelle ctxt false destiny import prover names smt_file
                                             handle ERROR x => (tracing ("SMT file: " ^ smt_file); raise (ERROR x))
                             in (smt_file, (ok, name)) end)

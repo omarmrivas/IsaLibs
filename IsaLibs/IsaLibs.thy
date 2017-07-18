@@ -108,6 +108,7 @@ declare [[
   use_metis = false,
   quickcheck_quiet = true,
   use_aprove=true,
+  
   generate_cps=false,
   linarith_split_limit = 10,
   eta_contract = false
@@ -159,30 +160,11 @@ definition right_distributive where
   [prop_scheme]: "right_distributive f g h i \<equiv> \<forall>x y z. f (g x y) z = h (i x z) (i y z)"
   
 ML {*
-  val schematic_lemmas = Utils.get_schematic_lemmas ()
-  val _ = map (tracing  o Syntax.string_of_term @{context}) schematic_lemmas
-*}
-  
-ML {*
 (*  val p1 = Multithreading.max_threads_value ()*)
   val p2 = Thread.numProcessors ()
   val _ = Future.ML_statistics := false
 *}
-
-(*ML {*
-  val smt2_dir = "/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks"
-  val destiny = "experiments/inductive_proofs2"
-(*  val smt2_files = smt2_dir |> SMT_Converter.get_smt2_files destiny
-                            |> filter (fn "" => false
-                                      | _ => true)*)
-  val smt2_files = ["/Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/sort_BubSortIsSort.smt2"]
-  val names = SMT_Converter.smt2bash_to_isabelle @{context} destiny "IsaLibs" "by induct_auto" smt2_files
-*}*)
-
-(*ML {*.
-  map (fn (smt2, (foo, thy)) => if foo then () else tracing (smt2 ^ " - " ^ thy ^ ".thy")) names
-*}*)
-
+ 
 (*
 /Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/list_Interleave.smt2 - list_Interleave.thy 
 /Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/list_weird_concat_map_bind.smt2 - list_weird_concat_map_bind.thy 
@@ -256,6 +238,65 @@ ML {*
 /Users/omarmrivas/Programs/tip-org-benchmarks/benchmarks/tip2015/tree_Flatten3.smt2 - tree_Flatten3.thy 
 val it = [(), (), (), (), (), (), (), (), (), (), ...]: unit list
 *)
- 
+  
+datatype Bin = One | ZeroAnd (ZeroAnd_0: "Bin") | OneAnd (OneAnd_0: "Bin")
+
+fun s :: "Bin => Bin" where
+"(s One) = (ZeroAnd One)"|
+"(s (ZeroAnd xs)) = (OneAnd xs)"|
+"(s (OneAnd ys)) = (ZeroAnd (s ys))"
+
+fun plusa :: "Bin => Bin => Bin" where
+"(plusa One y) = (s y)"|
+"(plusa (ZeroAnd z) One) = (s (ZeroAnd z))"|
+"(plusa (ZeroAnd z) (ZeroAnd ys)) = (ZeroAnd (plusa z ys))"|
+"(plusa (ZeroAnd z) (OneAnd xs)) = (OneAnd (plusa z xs))"|
+"(plusa (OneAnd x2) One) = (s (OneAnd x2))"|
+"(plusa (OneAnd x2) (ZeroAnd zs)) = (OneAnd (plusa x2 zs))"|
+"(plusa (OneAnd x2) (OneAnd ys2)) = (ZeroAnd (s (plusa x2 ys2)))"  
+
+fun timesa :: "Bin => Bin => Bin" where
+"(timesa One y) = y"|
+"(timesa (ZeroAnd xs) y) = (ZeroAnd (timesa xs y))"|
+"(timesa (OneAnd ys) y) = (plusa (ZeroAnd (timesa ys y)) y)"
+
+lemma TRS: 
+  "timesa One y \<equiv> y"
+  "timesa x One \<equiv> x"
+  "s One \<equiv> ZeroAnd One"
+  "plusa One y \<equiv> s y"
+  "plusa x One \<equiv> s x"
+  "plusa xa xa \<equiv> ZeroAnd xa"
+  "s (ZeroAnd xs) \<equiv> OneAnd xs"
+  "plusa y x \<equiv> plusa x y"
+  "s (OneAnd ys) \<equiv> ZeroAnd (s ys)"
+  "plusa y (ZeroAnd One) \<equiv> s (s y)"
+  "timesa (ZeroAnd xs) y \<equiv> ZeroAnd (timesa xs y)"
+  "timesa y (ZeroAnd xs) \<equiv> ZeroAnd (timesa y xs)"
+  "plusa x (s y) \<equiv> s (plusa x y)"
+  "timesa y (OneAnd One) \<equiv> plusa y (ZeroAnd y)"
+  "timesa (s y) z \<equiv> plusa z (timesa y z)"
+  "plusa (ZeroAnd z) (ZeroAnd ys) \<equiv> ZeroAnd (plusa z ys)"
+  "plusa x (OneAnd xa) \<equiv> s (plusa x (ZeroAnd xa))"
+  "plusa ya (plusa x ya) \<equiv> plusa x (ZeroAnd ya)"
+  "plusa (OneAnd x2) (ZeroAnd zs) \<equiv> OneAnd (plusa x2 zs)"
+  "timesa (OneAnd ys) y \<equiv> plusa (ZeroAnd (timesa ys y)) y"
+  "plusa y (plusa y (ZeroAnd x)) \<equiv> ZeroAnd (plusa x y)"
+  "timesa y (OneAnd (ZeroAnd One)) \<equiv> plusa y (ZeroAnd (ZeroAnd y))"
+  "plusa x (ZeroAnd (s y)) \<equiv> s (s (plusa x (ZeroAnd y)))"
+  "timesa ys (OneAnd (ZeroAnd (ZeroAnd One))) \<equiv> plusa ys (ZeroAnd (ZeroAnd (ZeroAnd ys)))"
+  "plusa (ZeroAnd One) (plusa x (ZeroAnd (ZeroAnd xa))) \<equiv> plusa x (ZeroAnd (OneAnd xa))"
+  "plusa (ZeroAnd (ZeroAnd One)) (plusa x (ZeroAnd (ZeroAnd (ZeroAnd xa)))) \<equiv> plusa x (ZeroAnd (ZeroAnd (OneAnd xa)))"
+  sorry
+  
+lemma R: "plusa (OneAnd One) (plusa y (ZeroAnd (ZeroAnd z))) \<equiv> plusa (s y) (ZeroAnd (OneAnd z))"
+  sorry
+    
+ML {*
+  val thy = @{theory}
+  val prop = @{prop "((timesa x (plusa y z)) = (plusa (timesa x y) (timesa x z)))"}
+  val def_lemmas = Utils.get_definitional_rewrites thy prop
+  val ctxt_nodefs = (Local_Theory.target_of ctxt) delsimps def_lemmas
+*}    
   
 end

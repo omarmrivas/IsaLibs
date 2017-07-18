@@ -19,6 +19,8 @@ structure DB_DPair
 
 val (max_time_in_termination, setup_max_time_in_termination) = Attrib.config_int @{binding "max_time_in_termination"} (K 180)
 
+exception Complexity of term list
+
 fun fold_subterms f (t $ u) a = 
     (* Simulate higher-order terms *)
     (* fold_subterms f t (fold_subterms f u (f (t $ u) a)) *)
@@ -651,7 +653,7 @@ fun extract_compatible_orders pi component =
                                    |> filter_out (fn (cname, _) => Const_Names.meta_eq = cname)
                                    |> map Const
       val _ = if length consts > 5
-              then tracing ("Constants: " ^ (string_of_int (length consts)))
+              then raise (Complexity consts)
               else ()
       fun test order = 
         forall (fn (u, v) => weak_lpo_ge pi order (u, v)) component
@@ -759,6 +761,9 @@ fun terminates ctxt TRS =
   let val timeOut = Config.get ctxt max_time_in_termination
   in Timeout.apply (Time.fromSeconds timeOut) (terminates' ctxt) TRS
         handle Timeout.TIMEOUT _ => false
+             | Complexity consts => (tracing ("Consts: " ^ Utils.str_of_terms ctxt consts);
+                                     tracing ("TRS: " ^ Utils.str_of_thms TRS);
+                                     false)
   end
 
 end

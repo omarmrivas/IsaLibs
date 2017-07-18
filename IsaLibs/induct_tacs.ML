@@ -589,16 +589,18 @@ fun generalized_eq ctxt timeOut size n gn table typsub lemmas subsumed failures 
 fun inductive_prover ctxt tactic timeOut prop =
   let val start = Timing.start ()
       val thy = Proof_Context.theory_of ctxt
-      val def_lemmas = Utils.get_definitional_rewrites thy prop
-      val lemmas_ref = Unsynchronized.ref def_lemmas
-      val ctxt_nodefs = (Local_Theory.target_of ctxt) delsimps def_lemmas
-      val lthy_nodefs = ctxt delsimps def_lemmas
-      val log_file = Context.theory_name thy ^ ".log"
+(*      val log_file = Context.theory_name thy ^ ".log"
       val path_file = Path.explode log_file
       val _ = if File.exists path_file
               then File.rm path_file
               else ()
-      val tracing = Utils.trace_log path_file
+      val tracing = Utils.trace_log path_file*)
+      val _ = tracing "Getting definitional rewrites..."
+      val def_lemmas = Utils.get_definitional_rewrites thy prop
+      val _ = tracing "Done"
+      val lemmas_ref = Unsynchronized.ref def_lemmas
+      val ctxt_nodefs = (Local_Theory.target_of ctxt) delsimps def_lemmas
+      val lthy_nodefs = ctxt delsimps def_lemmas
       val _ = tracing "Latex Goal: "
       val _ = tracing (Utils.latex_string_of_term ctxt prop)
       val _ = tracing "Goal: "
@@ -609,8 +611,10 @@ fun inductive_prover ctxt tactic timeOut prop =
         case sconj of
           SOME conj => tracing (msj ^ (Utils.string_of_term' ctxt conj))
         | NONE => ()*)
+      val _ = tracing "Preprocessing conjecture..."
       val (table, typsub) =
           DB_EQ_Terms.preprocess_conjecture ctxt size n prop
+      val _ = tracing "Done"
 (*      val _ = tracing ("Substitutions: " ^string_of_int (length tsubsts))*)
       fun try_prove simps conj =
         let val failures = Unsynchronized.ref (Net.empty : term Net.net)
@@ -656,7 +660,7 @@ fun inductive_prover ctxt tactic timeOut prop =
             t |> Net.match_term net
 (*            t |> Net.unify_term net*)
               |> exists (fn t' => Pattern.matches thy (t', t))
-      fun next_subgoal simps subgoals =
+(*      fun next_subgoal simps subgoals =
         case subgoals of
           goal :: subgoals => let val _ = tracing ("Normalising: " ^ Utils.string_of_term' ctxt goal)
                                   val goal' = Utils.normalise_term lthy_nodefs simps goal
@@ -667,7 +671,25 @@ fun inductive_prover ctxt tactic timeOut prop =
                                       then SOME (orient goal', subgoals)
                                       else SOME (goal', subgoals)
                               end
-        | [] => NONE
+        | [] => NONE*)
+      fun next_subgoal simps subgoals =
+        let val subgoals' = 
+          subgoals |> map (arg_cong_equation' thy o Utils.normalise_term lthy_nodefs simps)
+                   |> filter (fn conj => conj <> @{prop "True"})
+                   |> map (fn conj => if can (HOLogic.dest_eq o HOLogic.dest_Trueprop) conj
+                                      then orient conj
+                                      else conj)
+                   |> Utils.make_term_set' thy
+                   |> Utils.sort_by_general thy
+        in if null subgoals'
+           then NONE
+           else case Par_List.get_some (fn conj =>
+                        case try_prove simps conj of
+                          Theorem _ => SOME (conj, remove (op =) conj subgoals')
+                          | _ => NONE) subgoals' of
+                   SOME (conj, subgoals) => SOME (conj, subgoals)
+                 | NONE => SOME (hd subgoals', tl subgoals')
+        end
       fun next_conjecture thy foo gen simps net store =
         case pull_conjecture thy foo gen store of
             SOME ((meth, conjecture), store) =>
@@ -701,18 +723,21 @@ fun inductive_prover ctxt tactic timeOut prop =
                     end*)
           else raise ERROR "Not equation"
       val lambda_size = Config.get ctxt Random_Terms.max_lambda_size
+      val _ = tracing "Calculating equational theory exploration sequence..."
       val eq_tx = DB_EQ_Terms.equational_theory_exploration ctxt_nodefs (table, typsub) size n lambda_size lemmas_ref prop
                   |> Seq.map (pair "EQ_TX")
+      val _ = tracing "Done"
+      val _ = tracing "Calculating known equational laws sequence..."
       val known_laws = DB_EQ_Terms.known_eq_laws ctxt_nodefs (table, typsub) size n lemmas_ref prop
                   |> Seq.map (pair "EQ_KNOWN")
+      val _ = tracing "Done"
       val conj_store = mk_conjecture_store (known_laws, eq_tx, [])
       fun recursive_prover foo store net subgoals lemmas conj =
         case try_prove lemmas conj of
           Theorem thm =>(let val lemmas = build_trs lemmas thm
                              val _ = lemmas_ref := lemmas
                              val net = add_thms_to_net net lemmas
-                             val subgoals = Utils.sort_by_general thy subgoals
-                         in case next_subgoal lemmas subgoals of
+                         in case (tracing "next_subgoal"; next_subgoal lemmas subgoals) of
                           SOME (goal, subgoals) => recursive_prover (not foo) store net subgoals lemmas goal
                         | NONE => SOME (build_trs lemmas thm) end)
         | Failure trms =>
@@ -757,7 +782,7 @@ fun inductive_prover ctxt tactic timeOut prop =
 (*                val generalisation =
                        (conj::subgoals @ walsh @ transverse)
                           |> generalized_eq ctxt timeOut size n gn table typsub lemmas (subsumed_in_net net) trms*)
-            in case next_conjecture thy foo generalization lemmas net new_store of
+            in case (tracing "next_conjecture"; next_conjecture thy foo generalization lemmas net new_store) of
                 SOME (conjecture, store) => recursive_prover (not foo) store (add_term_to_net net conj) (conj :: subgoals) lemmas conjecture
               | NONE => NONE
 (*               then NONE
@@ -791,7 +816,7 @@ fun inductive_prover ctxt tactic timeOut prop =
 fun inductive_prover_tactic' ctxt =
   fn (goal, i) =>
     case inductive_prover ctxt ind_auto_failure (Config.get ctxt Prover.max_time_in_proof) goal of
-      (ctxt,SOME simps) =>  (tracing "Proved original goal!"; simp_tac (ctxt addsimps simps) i)
+      (ctxt,SOME simps) => (tracing "Proved original goal!"; simp_tac (ctxt addsimps simps) i)
     | (_,NONE) => (tracing "Not proved!"; no_tac)
 
 fun inductive_prover_tactic ctxt =

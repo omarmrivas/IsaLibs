@@ -95,7 +95,8 @@ fun counter_example ctxt size n table typsub simps (conjecture : term) =
   in exists (fn conj => Utils.normalise_term ctxt simps conj = @{prop "False"}) conjs end
 
 fun discover_equations ctxt simps typsub tsubsts terms =
-  let fun check t s =
+  let val buff = Thread.numProcessors () * 2
+      fun check t s =
         let val eq = (t, s) |> HOLogic.mk_eq
                             |> HOLogic.mk_Trueprop
                             |> Utils.normalise_term ctxt (!simps)
@@ -103,7 +104,7 @@ fun discover_equations ctxt simps typsub tsubsts terms =
            then SOME eq
            else NONE
         end
-      fun check_eqs tab terms =
+(*      fun check_eqs tab terms =
         case Seq.pull terms of
           SOME (t, terms) => 
               let val t' = typsub t
@@ -116,8 +117,25 @@ fun discover_equations ctxt simps typsub tsubsts terms =
                                       (Seq.make (fn () => SOME (last, check_eqs (Term_List_Tab.update (key, t::ss) tab) terms))) end)
                  | NONE => check_eqs (Term_List_Tab.update (key, [t]) tab) terms
               end
-        | NONE => Seq.empty
-  in check_eqs Term_List_Tab.empty terms end
+        | NONE => Seq.empty*)
+      fun check_eqs tab [] seq = 
+            (case Seq.chop buff seq of
+              ([], _) => Seq.empty
+            | (terms, seq) =>
+                let val terms = Par_List.map (fn t =>
+                        let val t' = typsub t
+                            val key = map (fn subst => Utils.normalise_term ctxt (!simps) (subst t')) tsubsts
+                        in (t, key) end) terms
+                in check_eqs tab terms seq end)
+        | check_eqs tab ((t,key) :: terms) seq =
+              case Term_List_Tab.lookup tab key of
+                  SOME ss => (case map_filter (check t) ss of
+                              [] => check_eqs (Term_List_Tab.update (key, t::ss) tab) terms seq
+                            | eqs  => let val (eqs,last) = split_last eqs
+                             in Seq.append (Seq.of_list eqs)
+                                      (Seq.make (fn () => SOME (last, check_eqs (Term_List_Tab.update (key, t::ss) tab) terms seq))) end)
+                 | NONE => check_eqs (Term_List_Tab.update (key, [t]) tab) terms seq
+  in check_eqs Term_List_Tab.empty [] terms end
 
 
 (* Finds a potential valid equation using tests
@@ -232,7 +250,7 @@ fun combine t l ctxt =
           Then apply the substitution. *)
 fun known_eq_laws ctxt (table, typsub) size n simps prop =
   let val thy = Proof_Context.theory_of ctxt
-      val schemes = Utils.get_schematic_lemmas ()
+(*      val schemes = Utils.get_schematic_lemmas ()*)
       val frees = Term.add_frees prop []
       fun monomorphize typ = (type_of o typsub) (Free ("x", typ))
       val tsubsts = frees

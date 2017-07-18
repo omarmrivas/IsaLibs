@@ -38,4 +38,12 @@ cp $FILE $DIR/$LOGIC
 sed -i '.bak' "s|imports $INCLUDE_FROM|imports \"$INCLUDE_TO\"|g" $DIR/$LOGIC/$LOGIC".thy"
 
 #isabelle build -c -v -D $DIR/$LOGIC
-isabelle build -c -v -o browser_info -D $DIR/$LOGIC
+isabelle build -c -v -j 0 -o browser_info -D $DIR/$LOGIC
+
+echo "Copy browser info"
+mkdir -p $DIR/$LOGIC/Browser
+
+BROWSER_PATH=`isabelle getenv -b ISABELLE_HOME_USER`"/browser_info/Unsorted/$LOGIC"
+cp $BROWSER_PATH/*.* $DIR/$LOGIC/Browser
+
+#isabelle build -c -n -D $DIR/$LOGIC
